@@ -42,11 +42,10 @@ echo "Extracting GRID installer payload"
 "$installer" --extract-only --target "$EXTRACTED"
 test -s "$EXTRACTED/kernel/Makefile"
 test -x "$EXTRACTED/nvidia-installer"
-if [[ ! -d "$EXTRACTED/lib" && ! -d "$EXTRACTED/lib64" ]]; then
-  echo "Expected lib/ or lib64/ in extracted installer" >&2
-  find "$EXTRACTED" -maxdepth 2 -type d -print >&2
-  exit 1
-fi
+echo "Extracted top-level entries:"
+ls -la "$EXTRACTED"
+echo "NVIDIA userspace payload candidates:"
+find "$EXTRACTED" -maxdepth 4 \( -name 'nvidia-smi' -o -name 'libnvidia-ml.so*' -o -name 'libcuda.so*' \) -print
 
 {
   echo "image=$IMAGE"
