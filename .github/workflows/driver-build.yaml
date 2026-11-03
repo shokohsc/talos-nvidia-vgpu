@@ -5,6 +5,7 @@ on:
     branches: [main, "feature/**"]
     paths:
       - "Pkgfile"
+      - "base/**"
       - "Dockerfile.kernel-build"
       - "nvidia-vgpu-guest/**"
       - "scripts/extract-driver.sh"
