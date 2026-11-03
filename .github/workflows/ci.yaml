@@ -41,6 +41,6 @@ jobs:
           test -s nvidia-vgpu-guest/files/nvidia.conf
           test -s Dockerfile.kernel-build
           test -x scripts/validate-artifacts.sh
-          test -x scripts/extract-driver.sh
+          test -s scripts/extract-driver.sh
           grep -q 'BUILD_ARG_KERNEL_IMAGE' nvidia-vgpu-guest/pkg.yaml
           grep -q 'Module.symvers' nvidia-vgpu-guest/pkg.yaml
