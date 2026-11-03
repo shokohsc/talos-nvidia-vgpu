@@ -1,0 +1,13 @@
+name: base
+variant: scratch
+shell: /bin/bash
+dependencies:
+  - image: "{{ .TOOLS_IMAGE }}"
+    from: /
+    to: /
+  - image: "{{ .EXTENSIONS_VALIDATOR_IMAGE }}"
+    from: /
+    to: /
+finalize:
+  - from: /
+    to: /
