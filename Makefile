@@ -27,7 +27,7 @@ kernel-build:
 	git -C "$(PKGS_DIR)" checkout "$(PKGS_REF)"
 	make -C "$(PKGS_DIR)" local-kernel-build PLATFORM="$(PLATFORM)" DEST="$(CURDIR)/$(KERNEL_BUILD_DIR)"
 	docker buildx build --platform "$(PLATFORM)" -f "$(CURDIR)/Dockerfile.kernel-build" \
-		-t "$(KERNEL_IMAGE)" --push _out
+		-t "$(KERNEL_IMAGE)" --push "$(KERNEL_BUILD_DIR)"
 
 build: require-KERNEL_IMAGE
 	@mkdir -p "$(dirname "$(EXTENSION_IMAGE)")"
