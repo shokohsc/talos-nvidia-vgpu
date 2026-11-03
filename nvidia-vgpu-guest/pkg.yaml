@@ -19,8 +19,8 @@ steps:
         test -s /src/include/config/kernel.release
         test -s /pkg/driver/kernel/Makefile
         test -x /pkg/driver/nvidia-installer
-        test -d /pkg/driver/lib
-        test -x /pkg/driver/nvidia-smi
+        test -d /pkg/driver/lib || test -d /pkg/driver/lib64
+        find /pkg/driver -type f -name nvidia-smi -print -quit | grep -q .
         kernel_release="$(cat /src/include/config/kernel.release)"
         echo "Building NVIDIA GRID {{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} for Talos {{ .BUILD_ARG_TALOS_VERSION }}, kernel ${kernel_release}"
     build:
@@ -42,8 +42,13 @@ steps:
         # Stage userspace files directly from the extracted GRID payload. This
         # avoids executing the vendor's distro installer in Talos' musl build
         # environment while preserving the driver-version-matched libraries.
-        cp -a /pkg/driver/lib/. /rootfs/usr/lib/
-        install -m 0755 /pkg/driver/nvidia-smi /rootfs/usr/bin/nvidia-smi
+        for libdir in /pkg/driver/lib /pkg/driver/lib64; do
+          if [[ -d "$libdir" ]]; then
+            cp -a "$libdir"/. /rootfs/usr/lib/
+          fi
+        done
+        nvidia_smi="$(find /pkg/driver -type f -name nvidia-smi -print -quit)"
+        install -m 0755 "$nvidia_smi" /rootfs/usr/bin/nvidia-smi
         if [[ -d /pkg/driver/firmware ]]; then
           mkdir -p /rootfs/usr/lib/firmware/nvidia
           cp -a /pkg/driver/firmware/. /rootfs/usr/lib/firmware/nvidia/
