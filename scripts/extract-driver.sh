@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-IMAGE="\${NVIDIA_DRIVER_IMAGE:-docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid}"
-EXPECTED_VERSION="\${NVIDIA_DRIVER_VERSION:-535.161.07}"
-WORKDIR="\${WORKDIR:-$PWD/_work/nvidia-vgpu}"
+IMAGE="${NVIDIA_DRIVER_IMAGE:-docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid}"
+EXPECTED_VERSION="${NVIDIA_DRIVER_VERSION:-535.161.07}"
+WORKDIR="${WORKDIR:-$PWD/_work/nvidia-vgpu}"
 ROOTFS="$WORKDIR/image-root"
 EXTRACTED="$WORKDIR/extracted"
-METADATA="\${METADATA_FILE:-$WORKDIR/driver-metadata.txt}"
+METADATA="${METADATA_FILE:-$WORKDIR/driver-metadata.txt}"
 command -v docker >/dev/null
 command -v sha256sum >/dev/null
 rm -rf "$WORKDIR"
@@ -22,13 +22,13 @@ find "$ROOTFS" -type f -name '*.run' -print
 echo "::endgroup::"
 
 mapfile -d '' installers < <(find "$ROOTFS" -type f -name '*.run' -print0)
-if [[ "\${#installers[@]}" -ne 1 ]]; then
-  echo "Expected exactly one .run installer in $IMAGE; found \${#installers[@]}" >&2
+if [[ "${#installers[@]}" -ne 1 ]]; then
+  echo "Expected exactly one .run installer in $IMAGE; found ${#installers[@]}" >&2
   find "$ROOTFS" -maxdepth 5 -type f | head -200 >&2 || true
   exit 1
 fi
 
-installer="\${installers[0]}"
+installer="${installers[0]}"
 echo "Checking installer: $installer"
 chmod +x "$installer"
 "$installer" --check
@@ -57,7 +57,7 @@ fi
   echo "extracted_tree_size=$(du -sh "$EXTRACTED" | awk '{print $1}')"
 } | tee "$METADATA"
 
-if [[ -n "\${DRIVER_SOURCE_DIR:-}" ]]; then
+if [[ -n "${DRIVER_SOURCE_DIR:-}" ]]; then
   rm -rf "$DRIVER_SOURCE_DIR"
   mkdir -p "$(dirname "$DRIVER_SOURCE_DIR")"
   cp -a "$EXTRACTED" "$DRIVER_SOURCE_DIR"
