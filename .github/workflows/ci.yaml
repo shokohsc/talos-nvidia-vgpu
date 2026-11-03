@@ -36,6 +36,8 @@ jobs:
           yaml.safe_load(workflow)
           print("YAML syntax checks passed")
           PY
+      - name: Validate Makefile targets
+        run: make -n build KERNEL_IMAGE=example.invalid/kernel:tag >/dev/null
       - name: Validate required build inputs
         run: |
           test -s nvidia-vgpu-guest/files/nvidia.conf
