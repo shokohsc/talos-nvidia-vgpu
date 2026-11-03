@@ -62,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nvidia-vgpu-535.161.07-talos-v1.13.10
-          path: \${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
+          path: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
           if-no-files-found: error
           retention-days: 14
       - name: Add build metadata to job summary
