@@ -41,6 +41,7 @@ fi
 installer="$INSTALLER_DIR/$(basename "${installer_paths[0]}")"
 docker export "$container_id" | tar -xOf - "${installer_paths[0]}" > "$installer"
 chmod +x "$installer"
+installer_sha256="$(sha256sum "$installer" | awk '{print $1}')"
 
 # The image is no longer needed once the installer has been streamed out.
 docker rm -f "$container_id" >/dev/null
@@ -71,7 +72,7 @@ find "$EXTRACTED" -maxdepth 4 \( -name 'nvidia-smi' -o -name 'libnvidia-ml.so*' 
 {
   echo "image=$IMAGE"
   echo "installer=$(basename "${installer_paths[0]}")"
-  echo "installer_sha256=$(sha256sum "$WORKDIR/installer/$(basename "${installer_paths[0]}")" 2>/dev/null | awk '{print $1}' || echo removed-after-extraction)"
+  echo "installer_sha256=$installer_sha256"
   echo "driver_version=$EXPECTED_VERSION"
   echo "extracted_kernel_source=$EXTRACTED/kernel"
   echo "extracted_tree_size=$(du -sh "$EXTRACTED" | awk '{print $1}')"
