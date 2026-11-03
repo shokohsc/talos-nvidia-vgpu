@@ -19,6 +19,8 @@ steps:
         test -s /src/include/config/kernel.release
         test -s /pkg/driver/kernel/Makefile
         test -x /pkg/driver/nvidia-installer
+        test -d /pkg/driver/lib
+        test -x /pkg/driver/nvidia-smi
         kernel_release="$(cat /src/include/config/kernel.release)"
         echo "Building NVIDIA GRID {{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} for Talos {{ .BUILD_ARG_TALOS_VERSION }}, kernel \${kernel_release}"
     build:
@@ -29,27 +31,23 @@ steps:
       - |
         kernel_release="$(cat /src/include/config/kernel.release)"
         module_dir="/rootfs/usr/lib/modules/\${kernel_release}"
-        mkdir -p "\${module_dir}" /rootfs/usr/local/lib/modprobe.d
+        mkdir -p "\${module_dir}" /rootfs/usr/local/lib/modprobe.d /rootfs/usr/lib /rootfs/usr/bin
         cp /src/modules.order "\${module_dir}/"
         cp /src/modules.builtin "\${module_dir}/"
         cp /src/modules.builtin.modinfo "\${module_dir}/"
         cd /pkg/driver/kernel
         make LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" modules_install \
           SYSSRC=/src INSTALL_MOD_PATH=/rootfs/usr INSTALL_MOD_DIR=extra INSTALL_MOD_STRIP=1
-        /pkg/driver/nvidia-installer \
-          --silent --no-questions \
-          --no-kernel-modules \
-          --no-x-check --no-nouveau-check \
-          --no-nvidia-modprobe --no-distro-scripts \
-          --no-recursion \
-          --utility-prefix=/rootfs/usr --utility-libdir=lib \
-          --opengl-prefix=/rootfs/usr --opengl-libdir=lib \
-          --x-prefix=/rootfs/usr \
-          --x-module-path=/rootfs/usr/lib/xorg/modules \
-          --x-library-path=/rootfs/usr/lib \
-          --x-sysconfig-path=/rootfs/etc/X11/xorg.conf.d \
-          --documentation-prefix=/rootfs/usr/share/doc/nvidia-vgpu \
-          --application-profile-path=/rootfs/usr/share/nvidia
+
+        # Stage userspace files directly from the extracted GRID payload. This
+        # avoids executing the vendor's distro installer in Talos' musl build
+        # environment while preserving the driver-version-matched libraries.
+        cp -a /pkg/driver/lib/. /rootfs/usr/lib/
+        install -m 0755 /pkg/driver/nvidia-smi /rootfs/usr/bin/nvidia-smi
+        if [[ -d /pkg/driver/firmware ]]; then
+          mkdir -p /rootfs/usr/lib/firmware/nvidia
+          cp -a /pkg/driver/firmware/. /rootfs/usr/lib/firmware/nvidia/
+        fi
         cp /pkg/files/nvidia.conf /rootfs/usr/local/lib/modprobe.d/nvidia.conf
     test:
       - |
@@ -62,7 +60,7 @@ steps:
           }
         done
         find /rootfs/usr/lib -type f -name 'libnvidia-ml.so*' -print -quit | grep -q .
-        find /rootfs/usr/bin -type f -name 'nvidia-smi' -print -quit | grep -q .
+        test -x /rootfs/usr/bin/nvidia-smi
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
