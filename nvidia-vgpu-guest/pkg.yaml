@@ -25,7 +25,7 @@ steps:
     build:
       - |
         cd /pkg/driver/kernel
-        make LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" SYSSRC=/src
+        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" SYSSRC=/src
     install:
       - |
         kernel_release="$(cat /src/include/config/kernel.release)"
@@ -35,7 +35,7 @@ steps:
         cp /src/modules.builtin "${module_dir}/"
         cp /src/modules.builtin.modinfo "${module_dir}/"
         cd /pkg/driver/kernel
-        make LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" modules_install \
+        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" modules_install \
           SYSSRC=/src INSTALL_MOD_PATH=/rootfs/usr INSTALL_MOD_DIR=extra INSTALL_MOD_STRIP=1
 
         # Stage userspace files directly from the extracted GRID payload. This
