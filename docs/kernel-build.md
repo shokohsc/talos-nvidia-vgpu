@@ -60,6 +60,8 @@ Before packaging, require all of the following:
 4. Kernel modules and all required userspace components are from the same GRID guest driver version.
 5. Runtime test on Talos v1.13.10 with an assigned vGPU succeeds; inspect NVRM logs and test CUDA or the intended graphics workload.
 
-## Why the build is not run automatically here
+## CI build integration
 
-The GRID `.run` package is gated by NVIDIA's Licensing Portal and cannot be fetched anonymously. The public NVIDIA datacenter driver archive contains a similarly-versioned ordinary installer, not proof of the licensed vGPU GRID guest package. Until the authorized GRID file is supplied as a private build input, compiling a different package would produce the wrong artifact.
+The `driver-build.yaml` workflow pulls the user-supplied GRID installer image, extracts the `.run` archive on the ephemeral runner, and places the extracted tree in the ignored `nvidia-vgpu-guest/driver/` build-context directory. It then builds the exact kernel tree with `make local-kernel-build`, wraps the exported `/src` and `/toolchain` directories in a local OCI image, and invokes the bldr package target. The package builds the proprietary modules with the same kbuild invocation used by Talos' NVIDIA module package (`LD=ld.lld`, `OBJDUMP=llvm-objdump`, `SYSSRC=/src`), installs the modules and matching userspace files, and exports an OCI image as a GitHub Actions artifact.
+
+The CI build is experimental. NVIDIA 535.161.07 predates the Talos 1.13.10 Linux 6.18.48 kernel. A compile/package pass does not prove ABI or runtime compatibility; module loading, NVRM initialization, vGPU enumeration, and a workload must still be tested on a Talos VM with a Proxmox-assigned vGPU.
