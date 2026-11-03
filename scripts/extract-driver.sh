@@ -13,7 +13,7 @@ mkdir -p "$ROOTFS" "$EXTRACTED"
 
 echo "::group::Pull installer image"
 docker pull --platform linux/amd64 "$IMAGE"
-container_id="$(docker create --platform linux/amd64 "$IMAGE")"
+container_id="$(docker create --platform linux/amd64 --entrypoint /bin/true "$IMAGE")"
 cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker export "$container_id" | tar -xf - -C "$ROOTFS"
