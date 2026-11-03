@@ -1,20 +1,19 @@
 name: CI
-
 on:
   pull_request:
   push:
     branches: [main, "feature/**"]
-
 permissions:
   contents: read
-
 jobs:
   static:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Validate shell scripts
-        run: bash -n scripts/validate-artifacts.sh
+        run: |
+          bash -n scripts/validate-artifacts.sh
+          bash -n scripts/extract-driver.sh
       - name: Validate YAML
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML
@@ -25,15 +24,23 @@ jobs:
           for path in (pathlib.Path("Pkgfile"), pathlib.Path("nvidia-vgpu-guest/pkg.yaml")):
               text = path.read_text()
               if path.name == "Pkgfile":
-                  text = "\n".join(text.splitlines()[2:])
+                  text = "\n".join(text.splitlines()[1:])
               yaml.safe_load(text)
 
           manifest = pathlib.Path("nvidia-vgpu-guest/manifest.yaml.tmpl").read_text()
-          yaml.safe_load(manifest.replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.0"))
+          manifest = manifest.replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.10")
+          manifest = manifest.replace("{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}", "535.161.07")
+          yaml.safe_load(manifest)
+
+          workflow = pathlib.Path(".github/workflows/driver-build.yaml").read_text()
+          yaml.safe_load(workflow)
           print("YAML syntax checks passed")
           PY
-      - name: Validate required files
+      - name: Validate required build inputs
         run: |
           test -s nvidia-vgpu-guest/files/nvidia.conf
+          test -s Dockerfile.kernel-build
           test -x scripts/validate-artifacts.sh
-          grep -q 'BUILD_ARG_ARTIFACT_IMAGE' nvidia-vgpu-guest/pkg.yaml
+          test -x scripts/extract-driver.sh
+          grep -q 'BUILD_ARG_KERNEL_IMAGE' nvidia-vgpu-guest/pkg.yaml
+          grep -q 'Module.symvers' nvidia-vgpu-guest/pkg.yaml
