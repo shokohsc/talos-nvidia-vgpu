@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IMAGE="${NVIDIA_DRIVER_IMAGE:-docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid}"
+EXPECTED_VERSION="${NVIDIA_DRIVER_VERSION:-535.161.07}"
+WORKDIR="${WORKDIR:-$PWD/_work/nvidia-vgpu}"
+ROOTFS="$WORKDIR/image-root"
+EXTRACTED="$WORKDIR/extracted"
+METADATA="${METADATA_FILE:-$WORKDIR/driver-metadata.txt}"
+command -v docker >/dev/null
+command -v sha256sum >/dev/null
+rm -rf "$WORKDIR"
+mkdir -p "$ROOTFS" "$EXTRACTED"
+echo "Pulling $IMAGE"
+docker pull --platform linux/amd64 "$IMAGE"
+container_id="$(docker create --platform linux/amd64 "$IMAGE")"
+cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+docker export "$container_id" | tar -xf - -C "$ROOTFS"
+mapfile -d '' installers < <(find "$ROOTFS" -type f -name "NVIDIA-Linux-x86_64-${EXPECTED_VERSION}-grid.run" -print0)
+if [[ "${#installers[@]}" -ne 1 ]]; then
+  echo "Expected exactly one NVIDIA-Linux-x86_64-${EXPECTED_VERSION}-grid.run in $IMAGE; found ${#installers[@]}" >&2
+  find "$ROOTFS" -type f -name '*.run' -print >&2 || true
+  exit 1
+fi
+installer="${installers[0]}"
+chmod +x "$installer"
+"$installer" --check
+"$installer" --info | tee "$WORKDIR/installer-info.txt"
+"$installer" --extract-only --target "$EXTRACTED"
+test -s "$EXTRACTED/kernel/Makefile"
+test -d "$EXTRACTED/lib"
+grep -R -m1 -E '535\\.161\\.07' "$EXTRACTED" >/dev/null || {
+  echo "Extracted tree does not identify driver version $EXPECTED_VERSION" >&2
+  exit 1
+}
+{
+  echo "image=$IMAGE"
+  echo "installer=$(basename "$installer")"
+  echo "installer_sha256=$(sha256sum "$installer" | awk '{print $1}')"
+  echo "driver_version=$EXPECTED_VERSION"
+  echo "extracted_kernel_source=$EXTRACTED/kernel"
+  echo "extracted_tree_size=$(du -sh "$EXTRACTED" | awk '{print $1}')"
+} | tee "$METADATA"
+echo "GRID installer extraction succeeded: $EXTRACTED"
