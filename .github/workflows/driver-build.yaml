@@ -38,7 +38,11 @@ jobs:
           NVIDIA_DRIVER_IMAGE: docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
           NVIDIA_DRIVER_VERSION: "535.161.07"
           DRIVER_SOURCE_DIR: nvidia-vgpu-guest/driver
-        run: bash scripts/extract-driver.sh
+          WORKDIR: ${{ runner.temp }}/nvidia-vgpu-work
+        run: |
+          df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          bash scripts/extract-driver.sh
+          df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
       - name: Restore Talos kernel build cache
         id: kernel-cache
         uses: actions/cache/restore@v4
