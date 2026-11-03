@@ -5,6 +5,7 @@ on:
     branches: [main, "feature/**"]
     paths:
       - "Pkgfile"
+      - ".dockerignore"
       - "base/**"
       - "Dockerfile.kernel-build"
       - "nvidia-vgpu-guest/**"
