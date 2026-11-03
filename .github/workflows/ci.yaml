@@ -21,7 +21,7 @@ jobs:
           import pathlib
           import yaml
 
-          for path in (pathlib.Path("Pkgfile"), pathlib.Path("nvidia-vgpu-guest/pkg.yaml")):
+          for path in (pathlib.Path("Pkgfile"), pathlib.Path("nvidia-vgpu-guest/pkg.yaml"), pathlib.Path("base/pkg.yaml")):
               text = path.read_text()
               if path.name == "Pkgfile":
                   text = "\n".join(text.splitlines()[1:])
