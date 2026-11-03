@@ -3,28 +3,70 @@ variant: scratch
 shell: /bin/bash
 dependencies:
   - stage: base
-  - image: "{{ .BUILD_ARG_ARTIFACT_IMAGE }}"
-    from: /artifacts
-    to: /artifacts
+  - image: "{{ .BUILD_ARG_KERNEL_IMAGE }}"
+    from: /
+    to: /
+  - image: "{{ .LLVM_IMAGE }}:{{ .TOOLS_REV }}"
+    from: /
+    to: /
 steps:
-  - install:
+  - env:
+      ARCH: x86_64
+      LLVM: "1"
+    prepare:
       - |
-        test -n "{{ .BUILD_ARG_TALOS_VERSION }}"
-        test -n "{{ .BUILD_ARG_KERNEL_RELEASE }}"
-        test -d /artifacts/rootfs/usr/lib/modules/{{ .BUILD_ARG_KERNEL_RELEASE }}
-        mkdir -p /rootfs
-        cp -a /artifacts/rootfs/. /rootfs/
-        mkdir -p /rootfs/usr/local/lib/modprobe.d
+        test -s /src/Module.symvers
+        test -s /src/include/config/kernel.release
+        test -s /pkg/driver/kernel/Makefile
+        test -x /pkg/driver/nvidia-installer
+        kernel_release="$(cat /src/include/config/kernel.release)"
+        echo "Building NVIDIA GRID {{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} for Talos {{ .BUILD_ARG_TALOS_VERSION }}, kernel \${kernel_release}"
+    build:
+      - |
+        cd /pkg/driver/kernel
+        make LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" SYSSRC=/src
+    install:
+      - |
+        kernel_release="$(cat /src/include/config/kernel.release)"
+        module_dir="/rootfs/usr/lib/modules/\${kernel_release}"
+        mkdir -p "\${module_dir}" /rootfs/usr/local/lib/modprobe.d
+        cp /src/modules.order "\${module_dir}/"
+        cp /src/modules.builtin "\${module_dir}/"
+        cp /src/modules.builtin.modinfo "\${module_dir}/"
+        cd /pkg/driver/kernel
+        make LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" modules_install \
+          SYSSRC=/src INSTALL_MOD_PATH=/rootfs/usr INSTALL_MOD_DIR=extra INSTALL_MOD_STRIP=1
+        /pkg/driver/nvidia-installer \
+          --silent --no-questions \
+          --no-kernel-modules \
+          --no-x-check --no-nouveau-check \
+          --no-nvidia-modprobe --no-distro-scripts \
+          --no-recursion \
+          --utility-prefix=/rootfs/usr --utility-libdir=lib \
+          --opengl-prefix=/rootfs/usr --opengl-libdir=lib \
+          --x-prefix=/rootfs/usr \
+          --x-module-path=/rootfs/usr/lib/xorg/modules \
+          --x-library-path=/rootfs/usr/lib \
+          --x-sysconfig-path=/rootfs/etc/X11/xorg.conf.d \
+          --documentation-prefix=/rootfs/usr/share/doc/nvidia-vgpu \
+          --application-profile-path=/rootfs/usr/share/nvidia
         cp /pkg/files/nvidia.conf /rootfs/usr/local/lib/modprobe.d/nvidia.conf
     test:
       - |
-        module_root="/rootfs/usr/lib/modules/{{ .BUILD_ARG_KERNEL_RELEASE }}"
-        find "$module_root" -type f \( -name 'nvidia.ko' -o -name 'nvidia.ko.xz' -o -name 'nvidia.ko.zst' \) -print -quit | grep -q .
-        find "$module_root" -type f \( -name 'nvidia-uvm.ko' -o -name 'nvidia-uvm.ko.xz' -o -name 'nvidia-uvm.ko.zst' -o -name 'nvidia_uvm.ko' -o -name 'nvidia_uvm.ko.xz' -o -name 'nvidia_uvm.ko.zst' \) -print -quit | grep -q .
+        kernel_release="$(cat /src/include/config/kernel.release)"
+        module_dir="/rootfs/usr/lib/modules/\${kernel_release}"
+        for module in nvidia nvidia-modeset nvidia-uvm nvidia-drm; do
+          find "\${module_dir}" -type f -name "\${module}.ko" -print -quit | grep -q . || {
+            echo "Missing \${module}.ko in \${module_dir}" >&2
+            exit 1
+          }
+        done
+        find /rootfs/usr/lib -type f -name 'libnvidia-ml.so*' -print -quit | grep -q .
+        find /rootfs/usr/bin -type f -name 'nvidia-smi' -print -quit | grep -q .
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
-        /extensions-validator validate --rootfs=/extensions-validator-rootfs --pkg-name="${PKG_NAME}"
+        /extensions-validator validate --rootfs=/extensions-validator-rootfs --pkg-name="\${PKG_NAME}"
 finalize:
   - from: /rootfs
     to: /rootfs
