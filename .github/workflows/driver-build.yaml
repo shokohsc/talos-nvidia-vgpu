@@ -57,7 +57,7 @@ jobs:
             --file "$GITHUB_WORKSPACE/Dockerfile.kernel-build" \
             --tag "$KERNEL_IMAGE" \
             --push \
-            .
+            "$RUNNER_TEMP/kernel-build"
       - name: Build Talos system extension
         run: |
           docker buildx build \
