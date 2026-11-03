@@ -9,7 +9,7 @@ METADATA="${METADATA_FILE:-$WORKDIR/driver-metadata.txt}"
 command -v docker >/dev/null
 command -v sha256sum >/dev/null
 rm -rf "$WORKDIR"
-mkdir -p "$ROOTFS" "$EXTRACTED"
+mkdir -p "$ROOTFS"
 
 echo "::group::Pull installer image"
 docker pull --platform linux/amd64 "$IMAGE"
