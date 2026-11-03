@@ -26,10 +26,11 @@ kernel-build:
 	fi
 	git -C "$(PKGS_DIR)" checkout "$(PKGS_REF)"
 	make -C "$(PKGS_DIR)" local-kernel-build PLATFORM="$(PLATFORM)" DEST="$(CURDIR)/$(KERNEL_BUILD_DIR)"
-	docker buildx build --platform "$(PLATFORM)" -f Dockerfile.kernel-build \
+	docker buildx build --platform "$(PLATFORM)" -f "$(CURDIR)/Dockerfile.kernel-build" \
 		-t "$(KERNEL_IMAGE)" --push _out
 
 build: require-KERNEL_IMAGE
+	@mkdir -p "$(dirname "$(EXTENSION_IMAGE)")"
 	@test -s nvidia-vgpu-guest/driver/kernel/Makefile || (echo "Run 'make extract-driver' first" >&2; exit 2)
 	docker buildx build --platform "$(PLATFORM)" -f Pkgfile \
 		--target nvidia-vgpu-guest \
