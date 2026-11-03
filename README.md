@@ -30,7 +30,7 @@ The build does not push the proprietary extension to a public container registry
 With Docker installed:
 
 \`\`\`sh
-DRIVER_SOURCE_DIR=nvidia-vgpu-guest/driver ./scripts/extract-driver.sh
+DRIVER_SOURCE_DIR=nvidia-vgpu-guest/driver bash scripts/extract-driver.sh
 \`\`\`
 
 ## Kernel build pins
