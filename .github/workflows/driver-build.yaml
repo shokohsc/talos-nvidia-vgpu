@@ -1,0 +1,33 @@
+name: NVIDIA vGPU driver extraction
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "feature/**"]
+    paths:
+      - "scripts/extract-driver.sh"
+      - ".github/workflows/driver-build.yaml"
+permissions:
+  contents: read
+jobs:
+  extract-grid-installer:
+    name: Extract GRID 535.161.07
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract installer from public artifact image
+        env:
+          NVIDIA_DRIVER_IMAGE: docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
+          NVIDIA_DRIVER_VERSION: "535.161.07"
+        run: ./scripts/extract-driver.sh
+      - name: Publish extraction metadata to job summary
+        if: always()
+        run: |
+          if [ -f _work/nvidia-vgpu/driver-metadata.txt ]; then
+            {
+              echo "## NVIDIA GRID installer input"
+              echo '\x60\x60\x60text'
+              cat _work/nvidia-vgpu/driver-metadata.txt
+              echo '\x60\x60\x60'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
