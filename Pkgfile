@@ -1,0 +1,10 @@
+# syntax = ghcr.io/siderolabs/bldr:v0.6.5
+
+format: v1alpha2
+
+vars:
+  NVIDIA_DRIVER_VERSION: "535.161.07"
+
+labels:
+  org.opencontainers.image.source: https://github.com/shokohsc/talos-nvidia-vgpu
+  org.opencontainers.image.description: NVIDIA vGPU guest driver system extension for Talos Linux

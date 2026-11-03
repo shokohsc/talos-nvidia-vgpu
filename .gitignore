@@ -1,0 +1,6 @@
+_out/
+dist/
+*.run
+*.ko
+*.ko.xz
+*.ko.zst

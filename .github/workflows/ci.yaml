@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feature/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell scripts
+        run: bash -n scripts/validate-artifacts.sh
+      - name: Validate YAML
+        run: |
+          python3 -m pip install --disable-pip-version-check PyYAML
+          python3 - <<'PY'
+          import pathlib
+          import yaml
+
+          for path in (pathlib.Path("Pkgfile"), pathlib.Path("nvidia-vgpu-guest/pkg.yaml")):
+              text = path.read_text()
+              if path.name == "Pkgfile":
+                  text = "\n".join(text.splitlines()[2:])
+              yaml.safe_load(text)
+
+          manifest = pathlib.Path("nvidia-vgpu-guest/manifest.yaml.tmpl").read_text()
+          yaml.safe_load(manifest.replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.0"))
+          print("YAML syntax checks passed")
+          PY
+      - name: Validate required files
+        run: |
+          test -s nvidia-vgpu-guest/files/nvidia.conf
+          test -x scripts/validate-artifacts.sh
+          grep -q 'BUILD_ARG_ARTIFACT_IMAGE' nvidia-vgpu-guest/pkg.yaml
