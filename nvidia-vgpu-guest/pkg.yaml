@@ -19,9 +19,8 @@ steps:
     test:
       - |
         module_root="/rootfs/usr/lib/modules/{{ .BUILD_ARG_KERNEL_RELEASE }}"
-        for module in nvidia nvidia-uvm nvidia_uvm; do
-          find "$module_root" -type f \( -name "$module.ko" -o -name "$module.ko.xz" -o -name "$module.ko.zst" \) -print -quit | grep -q .
-        done
+        find "$module_root" -type f \( -name 'nvidia.ko' -o -name 'nvidia.ko.xz' -o -name 'nvidia.ko.zst' \) -print -quit | grep -q .
+        find "$module_root" -type f \( -name 'nvidia-uvm.ko' -o -name 'nvidia-uvm.ko.xz' -o -name 'nvidia-uvm.ko.zst' -o -name 'nvidia_uvm.ko' -o -name 'nvidia_uvm.ko.xz' -o -name 'nvidia_uvm.ko.zst' \) -print -quit | grep -q .
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
