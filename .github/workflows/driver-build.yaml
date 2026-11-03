@@ -24,7 +24,7 @@ jobs:
           NVIDIA_DRIVER_IMAGE: docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
           NVIDIA_DRIVER_VERSION: "535.161.07"
           DRIVER_SOURCE_DIR: nvidia-vgpu-guest/driver
-        run: ./scripts/extract-driver.sh
+        run: bash scripts/extract-driver.sh
       - name: Build exact Talos kernel tree
         env:
           PKGS_REF: 9b044c593c71b0ea6deb9985b7907e008b91220c
