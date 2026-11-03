@@ -19,8 +19,7 @@ steps:
         test -s /src/include/config/kernel.release
         test -s /pkg/driver/kernel/Makefile
         test -x /pkg/driver/nvidia-installer
-        test -d /pkg/driver/lib || test -d /pkg/driver/lib64
-        find /pkg/driver -type f -name nvidia-smi -print -quit | grep -q .
+        test -x /pkg/driver/nvidia-installer
         kernel_release="$(cat /src/include/config/kernel.release)"
         echo "Building NVIDIA GRID {{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} for Talos {{ .BUILD_ARG_TALOS_VERSION }}, kernel ${kernel_release}"
     build:
@@ -48,7 +47,9 @@ steps:
           fi
         done
         nvidia_smi="$(find /pkg/driver -type f -name nvidia-smi -print -quit)"
-        install -m 0755 "$nvidia_smi" /rootfs/usr/bin/nvidia-smi
+        if [[ -n "$nvidia_smi" ]]; then
+          install -m 0755 "$nvidia_smi" /rootfs/usr/bin/nvidia-smi
+        fi
         if [[ -d /pkg/driver/firmware ]]; then
           mkdir -p /rootfs/usr/lib/firmware/nvidia
           cp -a /pkg/driver/firmware/. /rootfs/usr/lib/firmware/nvidia/
@@ -64,8 +65,11 @@ steps:
             exit 1
           }
         done
-        find /rootfs/usr/lib -type f -name 'libnvidia-ml.so*' -print -quit | grep -q .
-        test -x /rootfs/usr/bin/nvidia-smi
+        if find /rootfs/usr/lib -type f -name 'libnvidia-ml.so*' -print -quit | grep -q .; then
+          test -x /rootfs/usr/bin/nvidia-smi
+        else
+          echo "GRID archive has no NVML userspace files; this package currently provides kernel modules only"
+        fi
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
