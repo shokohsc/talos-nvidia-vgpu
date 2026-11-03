@@ -37,14 +37,14 @@ DRIVER_SOURCE_DIR=nvidia-vgpu-guest/driver bash scripts/extract-driver.sh
 
 With Docker Buildx and GHCR write access:
 
-\`\`\`sh
+```sh
 make extract-driver
 docker login ghcr.io
 make kernel-build
 make build
-\`\`\`
+```
 
-Override \`TALOS_VERSION\`, \`NVIDIA_DRIVER_VERSION\`, \`KERNEL_IMAGE\`, or \`EXTENSION_IMAGE\` when using a different pinned build. The kernel image is pushed to GHCR so the bldr build can consume the exact generated kernel tree; the final extension is exported locally as an OCI archive.
+Override `TALOS_VERSION`, `NVIDIA_DRIVER_VERSION`, `KERNEL_IMAGE`, or `EXTENSION_IMAGE` when using a different pinned build. The kernel image is pushed to GHCR so the bldr build can consume the exact generated kernel tree; the final extension is exported locally as an OCI archive.
 
 ## Kernel build pins
 
