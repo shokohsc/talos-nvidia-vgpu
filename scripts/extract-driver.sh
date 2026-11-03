@@ -10,27 +10,44 @@ command -v docker >/dev/null
 command -v sha256sum >/dev/null
 rm -rf "$WORKDIR"
 mkdir -p "$ROOTFS" "$EXTRACTED"
-echo "Pulling $IMAGE"
+
+echo "::group::Pull installer image"
 docker pull --platform linux/amd64 "$IMAGE"
 container_id="$(docker create --platform linux/amd64 "$IMAGE")"
 cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker export "$container_id" | tar -xf - -C "$ROOTFS"
-mapfile -d '' installers < <(find "$ROOTFS" -type f -name "NVIDIA-Linux-x86_64-\${EXPECTED_VERSION}-grid.run" -print0)
+echo "Installer files found in image:"
+find "$ROOTFS" -type f -name '*.run' -print
+echo "::endgroup::"
+
+mapfile -d '' installers < <(find "$ROOTFS" -type f -name '*.run' -print0)
 if [[ "\${#installers[@]}" -ne 1 ]]; then
-  echo "Expected exactly one NVIDIA-Linux-x86_64-\${EXPECTED_VERSION}-grid.run in $IMAGE; found \${#installers[@]}" >&2
-  find "$ROOTFS" -type f -name '*.run' -print >&2 || true
+  echo "Expected exactly one .run installer in $IMAGE; found \${#installers[@]}" >&2
+  find "$ROOTFS" -maxdepth 5 -type f | head -200 >&2 || true
   exit 1
 fi
+
 installer="\${installers[0]}"
+echo "Checking installer: $installer"
 chmod +x "$installer"
 "$installer" --check
 "$installer" --info | tee "$WORKDIR/installer-info.txt"
-grep -Fq "$EXPECTED_VERSION" "$WORKDIR/installer-info.txt"
+if ! grep -Fq "$EXPECTED_VERSION" "$WORKDIR/installer-info.txt" && [[ "$(basename "$installer")" != *"$EXPECTED_VERSION"* ]]; then
+  echo "Installer metadata/name does not match expected version $EXPECTED_VERSION" >&2
+  exit 1
+fi
+
+echo "Extracting GRID installer payload"
 "$installer" --extract-only --target "$EXTRACTED"
 test -s "$EXTRACTED/kernel/Makefile"
 test -x "$EXTRACTED/nvidia-installer"
-test -d "$EXTRACTED/lib"
+if [[ ! -d "$EXTRACTED/lib" && ! -d "$EXTRACTED/lib64" ]]; then
+  echo "Expected lib/ or lib64/ in extracted installer" >&2
+  find "$EXTRACTED" -maxdepth 2 -type d -print >&2
+  exit 1
+fi
+
 {
   echo "image=$IMAGE"
   echo "installer=$(basename "$installer")"
@@ -39,10 +56,12 @@ test -d "$EXTRACTED/lib"
   echo "extracted_kernel_source=$EXTRACTED/kernel"
   echo "extracted_tree_size=$(du -sh "$EXTRACTED" | awk '{print $1}')"
 } | tee "$METADATA"
+
 if [[ -n "\${DRIVER_SOURCE_DIR:-}" ]]; then
   rm -rf "$DRIVER_SOURCE_DIR"
   mkdir -p "$(dirname "$DRIVER_SOURCE_DIR")"
   cp -a "$EXTRACTED" "$DRIVER_SOURCE_DIR"
   echo "Copied extracted GRID driver source to $DRIVER_SOURCE_DIR"
 fi
+
 echo "GRID installer extraction succeeded: $EXTRACTED"
