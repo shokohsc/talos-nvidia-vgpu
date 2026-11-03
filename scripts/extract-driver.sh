@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-IMAGE="${NVIDIA_DRIVER_IMAGE:-docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid}"
-EXPECTED_VERSION="${NVIDIA_DRIVER_VERSION:-535.161.07}"
-WORKDIR="${WORKDIR:-$PWD/_work/nvidia-vgpu}"
+IMAGE="\${NVIDIA_DRIVER_IMAGE:-docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid}"
+EXPECTED_VERSION="\${NVIDIA_DRIVER_VERSION:-535.161.07}"
+WORKDIR="\${WORKDIR:-$PWD/_work/nvidia-vgpu}"
 INSTALLER_DIR="$WORKDIR/installer"
-METADATA="${METADATA_FILE:-$WORKDIR/driver-metadata.txt}"
-# Extract directly into the package context. Avoid keeping a second 1.2+ GiB
-# copy of the expanded driver tree on the hosted runner.
-EXTRACTED="${DRIVER_SOURCE_DIR:-$WORKDIR/extracted}"
+METADATA="\${METADATA_FILE:-$WORKDIR/driver-metadata.txt}"
+EXTRACTED="\${DRIVER_SOURCE_DIR:-$WORKDIR/extracted}"
 
 command -v docker >/dev/null
 command -v sha256sum >/dev/null
@@ -26,24 +24,23 @@ echo "::group::Pull GRID installer image"
 docker pull --platform linux/amd64 "$IMAGE"
 container_id="$(docker create --platform linux/amd64 --entrypoint /bin/true "$IMAGE")"
 
-# Do not unpack the complete container filesystem. List the exported tar and
-# stream only the self-extracting installer to disk.
+# Stream only the .run file out of the container export; do not unpack its
+# complete root filesystem onto the hosted runner.
+escaped_version="\${EXPECTED_VERSION//./\\.}"
 mapfile -t installer_paths < <(
   docker export "$container_id" |
     tar -tf - |
-    grep -E '(^|/)NVIDIA-Linux-x86_64-${EXPECTED_VERSION//./\\.}(-grid)?\\.run$' |
-    sed 's#^\\./##'
+    grep -E "(^|/)NVIDIA-Linux-x86_64-\${escaped_version}(-grid)?\.run$"
 )
-if [[ "${#installer_paths[@]}" -ne 1 ]]; then
-  echo "Expected exactly one NVIDIA ${EXPECTED_VERSION} .run installer in $IMAGE; found ${#installer_paths[@]}" >&2
+if [[ "\${#installer_paths[@]}" -ne 1 ]]; then
+  echo "Expected exactly one NVIDIA \${EXPECTED_VERSION} .run installer in $IMAGE; found \${#installer_paths[@]}" >&2
   exit 1
 fi
-installer="$INSTALLER_DIR/$(basename "${installer_paths[0]}")"
-docker export "$container_id" | tar -xOf - "${installer_paths[0]}" > "$installer"
+installer="$INSTALLER_DIR/$(basename "\${installer_paths[0]}")"
+docker export "$container_id" | tar -xOf - "\${installer_paths[0]}" > "$installer"
 chmod +x "$installer"
 installer_sha256="$(sha256sum "$installer" | awk '{print $1}')"
 
-# The image is no longer needed once the installer has been streamed out.
 docker rm -f "$container_id" >/dev/null
 container_id=""
 docker image rm "$IMAGE" >/dev/null 2>&1 || true
@@ -71,7 +68,7 @@ find "$EXTRACTED" -maxdepth 4 \( -name 'nvidia-smi' -o -name 'libnvidia-ml.so*' 
 
 {
   echo "image=$IMAGE"
-  echo "installer=$(basename "${installer_paths[0]}")"
+  echo "installer=$(basename "\${installer_paths[0]}")"
   echo "installer_sha256=$installer_sha256"
   echo "driver_version=$EXPECTED_VERSION"
   echo "extracted_kernel_source=$EXTRACTED/kernel"
