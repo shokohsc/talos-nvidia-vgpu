@@ -36,10 +36,8 @@ steps:
           fi
         done
 
-        # The 535.161.07 Kbuild rules do not add kernel/common/inc to the
-        # compiler's include search path for these translation units. They
-        # include the shared headers by quoted basename from kernel/nvidia/,
-        # so place the staged headers alongside those sources as well.
+        # Keep the shared headers beside the proprietary sources too. The
+        # GRID 535 Kbuild files do not consistently add common/inc to -I.
         for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h; do
           install -D -m 0644 "/pkg/driver/kernel/common/inc/$header" "/pkg/driver/kernel/nvidia/$header"
         done
@@ -48,7 +46,18 @@ steps:
     build:
       - |
         cd /pkg/driver/kernel
-        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" SYSSRC=/src
+
+        # NVIDIA's source tree has several mutually-referencing header roots
+        # (common/inc, nvidia, conftest output, and GRID open-kernel headers).
+        # Discover their actual locations from this extracted driver payload
+        # instead of assuming a distro-specific include layout.
+        include_flags=()
+        while IFS= read -r include_dir; do
+          include_flags+=("-I${include_dir}")
+        done < <(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name '*.h' -printf '%h\\n' 2>/dev/null | sort -u)
+        extra_cflags="${include_flags[*]}"
+        echo "Adding ${#include_flags[@]} NVIDIA header directories to module include path"
+        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump EXTRA_CFLAGS="${extra_cflags}" -j "$(nproc)" SYSSRC=/src
     install:
       - |
         kernel_release="$(cat /src/include/config/kernel.release)"
