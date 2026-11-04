@@ -55,9 +55,21 @@ steps:
         while IFS= read -r include_dir; do
           include_flags+=("-I${include_dir}")
         done < <(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
-        extra_cflags="${include_flags[*]}"
-        echo "Adding ${#include_flags[@]} NVIDIA header directories to module include path"
-        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump EXTRA_CFLAGS="${extra_cflags}" -j "$(nproc)" SYSSRC=/src
+        # Kbuild's KCFLAGS is the supported way to add compiler flags globally.
+        # EXTRA_CFLAGS is legacy and can be replaced by NVIDIA's own Makefiles.
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -I/pkg/driver/kernel-open/common/inc"
+
+        for header in nvtypes.h nv-linux.h; do
+          header_path="$(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name "$header" -print -quit)"
+          if [[ -z "$header_path" ]]; then
+            echo "Required NVIDIA header not present in extracted payload: $header" >&2
+            exit 1
+          fi
+          echo "Found $header at $header_path"
+        done
+
+        echo "Adding ${#include_flags[@]} discovered NVIDIA header directories through KCFLAGS"
+        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump KCFLAGS="${extra_cflags}" -j "$(nproc)" SYSSRC=/src
     install:
       - |
         kernel_release="$(cat /src/include/config/kernel.release)"
