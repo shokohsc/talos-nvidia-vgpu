@@ -54,7 +54,7 @@ steps:
         include_flags=()
         while IFS= read -r include_dir; do
           include_flags+=("-I${include_dir}")
-        done < <(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name '*.h' -printf '%h\\n' 2>/dev/null | sort -u)
+        done < <(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
         extra_cflags="${include_flags[*]}"
         echo "Adding ${#include_flags[@]} NVIDIA header directories to module include path"
         make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump EXTRA_CFLAGS="${extra_cflags}" -j "$(nproc)" SYSSRC=/src
