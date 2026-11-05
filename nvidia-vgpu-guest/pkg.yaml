@@ -59,7 +59,7 @@ steps:
         test -s "${clang_resource_source}/stddef.h"
         mkdir -p "${clang_builtin_include}"
         find "${clang_resource_source}" -maxdepth 1 -type f ! -name stdint.h \
-          -exec cp -a {} "${clang_builtin_include}/" \\;
+          -exec cp -a {} "${clang_builtin_include}/" \;
 
         # NVIDIA 535's kernel-side nv-ioctl-numa.h includes <stdint.h>, but
         # Clang's userspace stdint.h redeclares int64_t/uint64_t already
@@ -73,7 +73,7 @@ steps:
         # The vendor Makefile normally injects this define through its legacy
         # EXTRA_CFLAGS; pass it globally because this build uses modern Kbuild
         # and KCFLAGS for all translation units.
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -DNV_VERSION_STRING=\\\"{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}\\\""
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -DNV_VERSION_STRING=\"{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}\""
 
         echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
         echo "Passing NVRM and NV_VERSION_STRING={{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} through KCFLAGS"
