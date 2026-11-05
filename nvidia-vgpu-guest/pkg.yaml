@@ -58,7 +58,7 @@ steps:
         test -s "${clang_resource_source}/stdarg.h"
         test -s "${clang_resource_source}/stddef.h"
         mkdir -p "${clang_builtin_include}"
-        find "${clang_resource_source}" -maxdepth 1 -type f ! -name stdint.h \\
+        find "${clang_resource_source}" -maxdepth 1 -type f ! -name stdint.h \
           -exec cp -a {} "${clang_builtin_include}/" \;
 
         # Kbuild's KCFLAGS is the supported way to add compiler flags globally.
