@@ -55,10 +55,25 @@ steps:
         while IFS= read -r include_dir; do
           include_flags+=("-I${include_dir}")
         done < <(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
+        # Kbuild uses -nostdinc for kernel modules. Explicitly add Clang's
+        # resource headers because NVIDIA's nv_stdarg.h/nv.h include compiler
+        # builtin headers (stdarg.h/stddef.h) through the normal include path.
+        clang_resource_dir="$(clang -print-resource-dir)"
+        clang_builtin_include="${clang_resource_dir}/include"
+        for header in stdarg.h stddef.h; do
+          if [[ ! -s "${clang_builtin_include}/${header}" ]]; then
+            echo "Clang resource header missing: ${clang_builtin_include}/${header}" >&2
+            echo "clang: $(command -v clang)" >&2
+            clang --version >&2
+            exit 1
+          fi
+        done
+
         # Kbuild's KCFLAGS is the supported way to add compiler flags globally.
         # EXTRA_CFLAGS is legacy and can be replaced by NVIDIA's own Makefiles.
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -I/pkg/driver/kernel-open/common/inc"
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -I/pkg/driver/kernel-open/common/inc -isystem ${clang_builtin_include}"
 
+        echo "Using Clang builtin headers from ${clang_builtin_include}"
         for header in nvtypes.h nv-linux.h; do
           header_path="$(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name "$header" -print -quit)"
           if [[ -z "$header_path" ]]; then
