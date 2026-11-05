@@ -48,7 +48,7 @@ steps:
         include_flags=()
         while IFS= read -r include_dir; do
           include_flags+=("-I${include_dir}")
-        done < <(find /pkg/driver/kernel -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
+        done < <(find /pkg/driver/kernel -type f -name '*.h' -printf '%h\\n' 2>/dev/null | sort -u)
         # Kbuild uses -nostdinc. Provide Clang's compiler builtin headers,
         # but deliberately exclude its stdint.h: that header conflicts with
         # Linux's int64_t/uint64_t typedefs in include/linux/types.h.
@@ -59,7 +59,7 @@ steps:
         test -s "${clang_resource_source}/stddef.h"
         mkdir -p "${clang_builtin_include}"
         find "${clang_resource_source}" -maxdepth 1 -type f ! -name stdint.h \
-          -exec cp -a {} "${clang_builtin_include}/" \;
+          -exec cp -a {} "${clang_builtin_include}/" \\;
 
         # NVIDIA 535's kernel-side nv-ioctl-numa.h includes <stdint.h>, but
         # Clang's userspace stdint.h redeclares int64_t/uint64_t already
@@ -68,14 +68,16 @@ steps:
         #include <linux/types.h>
         EOF
 
-        # Kbuild's KCFLAGS is global. Pass the driver version explicitly here:
-        # some modern kernel Kbuild paths no longer propagate NVIDIA's legacy
-        # EXTRA_CFLAGS definition to every translation unit.
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNV_VERSION_STRING=\\\"{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}\\\""
+        # NVIDIA's proprietary nv.h places kernel RM types (nvidia_stack_t,
+        # nv_state_t, nv_event_t, NV_GPU_NUM_BARS, etc.) behind #ifdef NVRM.
+        # The vendor Makefile normally injects this define through its legacy
+        # EXTRA_CFLAGS; pass it globally because this build uses modern Kbuild
+        # and KCFLAGS for all translation units.
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -DNV_VERSION_STRING=\\\"{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}\\\""
 
         echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
-        echo "Passing NV_VERSION_STRING={{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} through KCFLAGS"
-        for header in nvtypes.h nv-linux.h; do
+        echo "Passing NVRM and NV_VERSION_STRING={{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} through KCFLAGS"
+        for header in nvtypes.h nv-linux.h nv.h; do
           header_path="$(find /pkg/driver/kernel -type f -name "$header" -print -quit)"
           if [[ -z "$header_path" ]]; then
             echo "Required NVIDIA header not present in extracted payload: $header" >&2
