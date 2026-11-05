@@ -48,7 +48,7 @@ steps:
         include_flags=()
         while IFS= read -r include_dir; do
           include_flags+=("-I${include_dir}")
-        done < <(find /pkg/driver/kernel -type f -name '*.h' -printf '%h\\n' 2>/dev/null | sort -u)
+        done < <(find /pkg/driver/kernel -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
         # Kbuild uses -nostdinc. Provide Clang's compiler builtin headers,
         # but deliberately exclude its stdint.h: that header conflicts with
         # Linux's int64_t/uint64_t typedefs in include/linux/types.h.
