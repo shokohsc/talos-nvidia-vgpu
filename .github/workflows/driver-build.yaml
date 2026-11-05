@@ -19,8 +19,6 @@ jobs:
   build-extension:
     name: Build GRID 535.161.07 for Talos v1.13.10
     runs-on: ubuntu-24.04
-    # The first kernel build is a full Talos kernel compile. Subsequent runs
-    # restore the exact tree from Actions cache and only compile NVIDIA modules.
     timeout-minutes: 360
     env:
       PKGS_REF: 9b044c593c71b0ea6deb9985b7907e008b91220c
@@ -43,6 +41,22 @@ jobs:
           df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
           bash scripts/extract-driver.sh
           df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+      - name: Free runner disk space before kernel cache restore
+        run: |
+          echo "Disk usage before cleanup:"
+          df -h
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /usr/local/.ghcup \
+            /usr/local/share/chromium
+          sudo docker system prune --all --force --volumes || true
+          echo "Disk usage after cleanup:"
+          df -h
+          df -i
       - name: Restore Talos kernel build cache
         id: kernel-cache
         uses: actions/cache/restore@v4
