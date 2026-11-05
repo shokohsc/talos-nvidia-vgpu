@@ -61,11 +61,20 @@ steps:
         find "${clang_resource_source}" -maxdepth 1 -type f ! -name stdint.h \
           -exec cp -a {} "${clang_builtin_include}/" \;
 
-        # Kbuild's KCFLAGS is the supported way to add compiler flags globally.
-        # EXTRA_CFLAGS is legacy and can be replaced by NVIDIA's own Makefiles.
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include}"
+        # NVIDIA 535's kernel-side nv-ioctl-numa.h includes <stdint.h>, but
+        # Clang's userspace stdint.h redeclares int64_t/uint64_t already
+        # provided by Linux. Supply the kernel's own fixed-width types instead.
+        cat > "${clang_builtin_include}/stdint.h" <<'EOF'
+        #include <linux/types.h>
+        EOF
 
-        echo "Using filtered Clang builtin headers from ${clang_builtin_include} (stdint.h excluded)"
+        # Kbuild's KCFLAGS is global. Pass the driver version explicitly here:
+        # some modern kernel Kbuild paths no longer propagate NVIDIA's legacy
+        # EXTRA_CFLAGS definition to every translation unit.
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNV_VERSION_STRING=\\\"{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}\\\""
+
+        echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
+        echo "Passing NV_VERSION_STRING={{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} through KCFLAGS"
         for header in nvtypes.h nv-linux.h; do
           header_path="$(find /pkg/driver/kernel -type f -name "$header" -print -quit)"
           if [[ -z "$header_path" ]]; then
