@@ -20,23 +20,21 @@ steps:
         test -s /pkg/driver/kernel/Makefile
         test -x /pkg/driver/nvidia-installer
 
-        # GRID runfiles may keep shared headers in kernel-open/common/inc,
-        # while the proprietary kernel module build reads kernel/common/inc.
-        # Stage the headers explicitly here as well as during extraction: the
-        # package build context is the authoritative source used by bldr.
-        for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h; do
+        # The proprietary module sources must use one coherent common header
+        # tree. GRID archives can split shared headers into kernel-open/common;
+        # fill only absent files in kernel/common, preserving vendor files.
+        if [[ -d /pkg/driver/kernel-open/common ]]; then
+          mkdir -p /pkg/driver/kernel/common
+          cp -an /pkg/driver/kernel-open/common/. /pkg/driver/kernel/common/
+        fi
+        for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h nv-linux.h nvtypes.h; do
           if [[ ! -s "/pkg/driver/kernel/common/inc/$header" ]]; then
-            source_header="/pkg/driver/kernel-open/common/inc/$header"
-            if [[ ! -s "$source_header" ]]; then
-              echo "Missing NVIDIA header: $header" >&2
-              echo "Searched /pkg/driver/kernel/common/inc and /pkg/driver/kernel-open/common/inc" >&2
-              exit 1
-            fi
-            install -D -m 0644 "$source_header" "/pkg/driver/kernel/common/inc/$header"
+            echo "Missing NVIDIA header in proprietary build tree: $header" >&2
+            exit 1
           fi
         done
 
-        # Keep the shared headers beside the proprietary sources too. The
+        # Keep the four GRID shared headers beside the proprietary sources too. The
         # GRID 535 Kbuild files do not consistently add common/inc to -I.
         for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h; do
           install -D -m 0644 "/pkg/driver/kernel/common/inc/$header" "/pkg/driver/kernel/nvidia/$header"
@@ -54,7 +52,7 @@ steps:
         include_flags=()
         while IFS= read -r include_dir; do
           include_flags+=("-I${include_dir}")
-        done < <(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
+        done < <(find /pkg/driver/kernel -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
         # Kbuild uses -nostdinc for kernel modules. Explicitly add Clang's
         # resource headers because NVIDIA's nv_stdarg.h/nv.h include compiler
         # builtin headers (stdarg.h/stddef.h) through the normal include path.
@@ -71,11 +69,11 @@ steps:
 
         # Kbuild's KCFLAGS is the supported way to add compiler flags globally.
         # EXTRA_CFLAGS is legacy and can be replaced by NVIDIA's own Makefiles.
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -I/pkg/driver/kernel-open/common/inc -isystem ${clang_builtin_include}"
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include}"
 
         echo "Using Clang builtin headers from ${clang_builtin_include}"
         for header in nvtypes.h nv-linux.h; do
-          header_path="$(find /pkg/driver/kernel /pkg/driver/kernel-open -type f -name "$header" -print -quit)"
+          header_path="$(find /pkg/driver/kernel -type f -name "$header" -print -quit)"
           if [[ -z "$header_path" ]]; then
             echo "Required NVIDIA header not present in extracted payload: $header" >&2
             exit 1
