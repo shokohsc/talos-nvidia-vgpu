@@ -20,25 +20,21 @@ steps:
         test -s /pkg/driver/kernel/Makefile
         test -x /pkg/driver/nvidia-installer
 
-        # The proprietary module sources must use one coherent common header
-        # tree. GRID archives can split shared headers into kernel-open/common;
-        # fill only absent files in kernel/common, preserving vendor files.
-        if [[ -d /pkg/driver/kernel-open/common ]]; then
-          mkdir -p /pkg/driver/kernel/common
-          cp -an /pkg/driver/kernel-open/common/. /pkg/driver/kernel/common/
+        # Preserve the installer-provided proprietary tree. Never copy
+        # kernel-open headers into kernel/: the two module flavors have
+        # different interfaces. Print the real header locations for diagnosis.
+        echo "=== Proprietary kernel source headers ==="
+        find /pkg/driver/kernel -type f \\( \
+          -name os-interface.h -o -name nv-firmware.h -o -name nv-dmabuf.h -o \
+          -name nv-pci-types.h -o -name nv-linux.h -o -name nvtypes.h -o \
+          -name conftest.h -o -name nv.h -o -name nvstatus.h \\) -print | sort
+        echo "=== Separate open-kernel source headers (reference only) ==="
+        if [[ -d /pkg/driver/kernel-open ]]; then
+          find /pkg/driver/kernel-open -type f \\( \
+            -name os-interface.h -o -name nv-firmware.h -o -name nv-dmabuf.h -o \
+            -name nv-pci-types.h -o -name nv-linux.h -o -name nvtypes.h -o \
+            -name conftest.h -o -name nv.h -o -name nvstatus.h \\) -print | sort
         fi
-        for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h nv-linux.h nvtypes.h; do
-          if [[ ! -s "/pkg/driver/kernel/common/inc/$header" ]]; then
-            echo "Missing NVIDIA header in proprietary build tree: $header" >&2
-            exit 1
-          fi
-        done
-
-        # Keep the four GRID shared headers beside the proprietary sources too. The
-        # GRID 535 Kbuild files do not consistently add common/inc to -I.
-        for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h; do
-          install -D -m 0644 "/pkg/driver/kernel/common/inc/$header" "/pkg/driver/kernel/nvidia/$header"
-        done
         kernel_release="$(cat /src/include/config/kernel.release)"
         echo "Building NVIDIA GRID {{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} for Talos {{ .BUILD_ARG_TALOS_VERSION }}, kernel ${kernel_release}"
     build:
@@ -46,32 +42,30 @@ steps:
         cd /pkg/driver/kernel
 
         # NVIDIA's source tree has several mutually-referencing header roots
-        # (common/inc, nvidia, conftest output, and GRID open-kernel headers).
+        # (common/inc, nvidia, and conftest output) from the proprietary tree.
         # Discover their actual locations from this extracted driver payload
         # instead of assuming a distro-specific include layout.
         include_flags=()
         while IFS= read -r include_dir; do
           include_flags+=("-I${include_dir}")
         done < <(find /pkg/driver/kernel -type f -name '*.h' -printf '%h\n' 2>/dev/null | sort -u)
-        # Kbuild uses -nostdinc for kernel modules. Explicitly add Clang's
-        # resource headers because NVIDIA's nv_stdarg.h/nv.h include compiler
-        # builtin headers (stdarg.h/stddef.h) through the normal include path.
+        # Kbuild uses -nostdinc. Provide Clang's compiler builtin headers,
+        # but deliberately exclude its stdint.h: that header conflicts with
+        # Linux's int64_t/uint64_t typedefs in include/linux/types.h.
         clang_resource_dir="$(clang -print-resource-dir)"
-        clang_builtin_include="${clang_resource_dir}/include"
-        for header in stdarg.h stddef.h; do
-          if [[ ! -s "${clang_builtin_include}/${header}" ]]; then
-            echo "Clang resource header missing: ${clang_builtin_include}/${header}" >&2
-            echo "clang: $(command -v clang)" >&2
-            clang --version >&2
-            exit 1
-          fi
-        done
+        clang_resource_source="${clang_resource_dir}/include"
+        clang_builtin_include="/tmp/clang-kernel-builtin-headers"
+        test -s "${clang_resource_source}/stdarg.h"
+        test -s "${clang_resource_source}/stddef.h"
+        mkdir -p "${clang_builtin_include}"
+        find "${clang_resource_source}" -maxdepth 1 -type f ! -name stdint.h \\
+          -exec cp -a {} "${clang_builtin_include}/" \\;
 
         # Kbuild's KCFLAGS is the supported way to add compiler flags globally.
         # EXTRA_CFLAGS is legacy and can be replaced by NVIDIA's own Makefiles.
         extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include}"
 
-        echo "Using Clang builtin headers from ${clang_builtin_include}"
+        echo "Using filtered Clang builtin headers from ${clang_builtin_include} (stdint.h excluded)"
         for header in nvtypes.h nv-linux.h; do
           header_path="$(find /pkg/driver/kernel -type f -name "$header" -print -quit)"
           if [[ -z "$header_path" ]]; then
