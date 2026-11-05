@@ -24,16 +24,16 @@ steps:
         # kernel-open headers into kernel/: the two module flavors have
         # different interfaces. Print the real header locations for diagnosis.
         echo "=== Proprietary kernel source headers ==="
-        find /pkg/driver/kernel -type f \\( \
+        find /pkg/driver/kernel -type f \( \
           -name os-interface.h -o -name nv-firmware.h -o -name nv-dmabuf.h -o \
           -name nv-pci-types.h -o -name nv-linux.h -o -name nvtypes.h -o \
-          -name conftest.h -o -name nv.h -o -name nvstatus.h \\) -print | sort
+          -name conftest.h -o -name nv.h -o -name nvstatus.h \) -print | sort
         echo "=== Separate open-kernel source headers (reference only) ==="
         if [[ -d /pkg/driver/kernel-open ]]; then
-          find /pkg/driver/kernel-open -type f \\( \
+          find /pkg/driver/kernel-open -type f \( \
             -name os-interface.h -o -name nv-firmware.h -o -name nv-dmabuf.h -o \
             -name nv-pci-types.h -o -name nv-linux.h -o -name nvtypes.h -o \
-            -name conftest.h -o -name nv.h -o -name nvstatus.h \\) -print | sort
+            -name conftest.h -o -name nv.h -o -name nvstatus.h \) -print | sort
         fi
         kernel_release="$(cat /src/include/config/kernel.release)"
         echo "Building NVIDIA GRID {{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} for Talos {{ .BUILD_ARG_TALOS_VERSION }}, kernel ${kernel_release}"
@@ -59,7 +59,7 @@ steps:
         test -s "${clang_resource_source}/stddef.h"
         mkdir -p "${clang_builtin_include}"
         find "${clang_resource_source}" -maxdepth 1 -type f ! -name stdint.h \\
-          -exec cp -a {} "${clang_builtin_include}/" \\;
+          -exec cp -a {} "${clang_builtin_include}/" \;
 
         # Kbuild's KCFLAGS is the supported way to add compiler flags globally.
         # EXTRA_CFLAGS is legacy and can be replaced by NVIDIA's own Makefiles.
