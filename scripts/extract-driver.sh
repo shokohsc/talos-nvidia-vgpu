@@ -66,10 +66,10 @@ echo "Extracting GRID installer payload directly to $EXTRACTED"
   find "$EXTRACTED" -maxdepth 4 -type d -print | sort
   echo
   echo "=== Relevant NVIDIA headers (all source trees) ==="
-  find "$EXTRACTED" -type f \\( \
+  find "$EXTRACTED" -type f \( \
     -name os-interface.h -o -name nv-firmware.h -o -name nv-dmabuf.h -o \
     -name nv-pci-types.h -o -name nv-linux.h -o -name nvtypes.h -o \
-    -name conftest.h -o -name nv.h -o -name nvstatus.h \\) -print | sort
+    -name conftest.h -o -name nv.h -o -name nvstatus.h \) -print | sort
   echo
   echo "=== Kernel build entrypoints ==="
   for file in kernel/Makefile kernel/Kbuild kernel/nvidia/Makefile kernel-open/Makefile kernel-open/Kbuild; do
