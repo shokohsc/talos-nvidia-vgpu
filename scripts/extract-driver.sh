@@ -57,17 +57,12 @@ fi
 echo "Extracting GRID installer payload directly to $EXTRACTED"
 "$installer" --extract-only --target "$EXTRACTED"
 
-# Some GRID runfile repacks keep the shared NVIDIA headers under
-# kernel-open/common while the proprietary module Makefiles expect them at
-# kernel/common. Populate that shared include tree when it is absent.
-if [[ -d "$EXTRACTED/kernel-open/common/inc" ]]; then
-  for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h; do
-    if [[ ! -s "$EXTRACTED/kernel/common/inc/$header" && -s "$EXTRACTED/kernel-open/common/inc/$header" ]]; then
-      mkdir -p "$EXTRACTED/kernel/common"
-      cp -an "$EXTRACTED/kernel-open/common/." "$EXTRACTED/kernel/common/"
-      break
-    fi
-  done
+# GRID runfiles may split shared NVIDIA headers into kernel-open/common.
+# The proprietary kernel module build must resolve headers from kernel/common;
+# fill only files absent from that tree, preserving any vendor-provided files.
+if [[ -d "$EXTRACTED/kernel-open/common" ]]; then
+  mkdir -p "$EXTRACTED/kernel/common"
+  cp -an "$EXTRACTED/kernel-open/common/." "$EXTRACTED/kernel/common/"
 fi
 
 for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h; do
