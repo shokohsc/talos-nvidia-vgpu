@@ -57,22 +57,29 @@ fi
 echo "Extracting GRID installer payload directly to $EXTRACTED"
 "$installer" --extract-only --target "$EXTRACTED"
 
-# GRID runfiles may split shared NVIDIA headers into kernel-open/common.
-# The proprietary kernel module build must resolve headers from kernel/common;
-# fill only files absent from that tree, preserving any vendor-provided files.
-if [[ -d "$EXTRACTED/kernel-open/common" ]]; then
-  mkdir -p "$EXTRACTED/kernel/common"
-  cp -an "$EXTRACTED/kernel-open/common/." "$EXTRACTED/kernel/common/"
-fi
+# Keep the proprietary and open-kernel source trees separate. Do not
+# synthesize kernel/common by copying headers from kernel-open/common: their
+# interfaces are not interchangeable. Record the real installer layout so the
+# proprietary build can be corrected against the files NVIDIA actually ships.
+{
+  echo "=== Extracted source directories (depth <= 4) ==="
+  find "$EXTRACTED" -maxdepth 4 -type d -print | sort
+  echo
+  echo "=== Relevant NVIDIA headers (all source trees) ==="
+  find "$EXTRACTED" -type f \\( \
+    -name os-interface.h -o -name nv-firmware.h -o -name nv-dmabuf.h -o \
+    -name nv-pci-types.h -o -name nv-linux.h -o -name nvtypes.h -o \
+    -name conftest.h -o -name nv.h -o -name nvstatus.h \\) -print | sort
+  echo
+  echo "=== Kernel build entrypoints ==="
+  for file in kernel/Makefile kernel/Kbuild kernel/nvidia/Makefile kernel-open/Makefile kernel-open/Kbuild; do
+    if [[ -f "$EXTRACTED/$file" ]]; then
+      echo "--- $file"
+      sed -n '1,180p' "$EXTRACTED/$file"
+    fi
+  done
+} | tee "$WORKDIR/source-layout.txt"
 
-for header in os-interface.h nv-firmware.h nv-dmabuf.h nv-pci-types.h; do
-  if [[ ! -s "$EXTRACTED/kernel/common/inc/$header" ]]; then
-    echo "Missing NVIDIA kernel header after extraction: kernel/common/inc/$header" >&2
-    echo "Available common include directories:" >&2
-    find "$EXTRACTED" -path '*/common/inc' -type d -print >&2
-    exit 1
-  fi
-done
 
 rm -f "$installer"
 rmdir "$INSTALLER_DIR" 2>/dev/null || true
