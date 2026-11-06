@@ -120,7 +120,15 @@ steps:
         done
 
         echo "Adding ${#include_flags[@]} discovered NVIDIA header directories through KCFLAGS"
-        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump KCFLAGS="${extra_cflags}" -j "$(nproc)" SYSSRC=/src
+        # The GRID 535 DRM glue targets an older DRM API (fb_create signature,
+        # output_poll_changed and drm_driver.date were removed/changed before
+        # Linux 6.18). This guest package is headless: Proxmox owns the vGPU
+        # device and the guest needs the core, UVM and modeset modules, not
+        # the optional DRM/KMS integration. NVIDIA Kbuild supports excluding
+        # individual modules through NV_EXCLUDE_KERNEL_MODULES.
+        excluded_modules="nvidia-drm"
+        echo "Excluding optional kernel module(s): ${excluded_modules}"
+        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump KCFLAGS="${extra_cflags}" NV_EXCLUDE_KERNEL_MODULES="${excluded_modules}" -j "$(nproc)" SYSSRC=/src
     install:
       - |
         kernel_release="$(cat /src/include/config/kernel.release)"
@@ -130,7 +138,7 @@ steps:
         cp /src/modules.builtin "${module_dir}/"
         cp /src/modules.builtin.modinfo "${module_dir}/"
         cd /pkg/driver/kernel
-        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump -j "$(nproc)" modules_install \
+        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump NV_EXCLUDE_KERNEL_MODULES=nvidia-drm -j "$(nproc)" modules_install \
           SYSSRC=/src INSTALL_MOD_PATH=/rootfs/usr INSTALL_MOD_DIR=extra INSTALL_MOD_STRIP=1
 
         # Stage userspace files directly from the extracted GRID payload. This
@@ -154,7 +162,7 @@ steps:
       - |
         kernel_release="$(cat /src/include/config/kernel.release)"
         module_dir="/rootfs/usr/lib/modules/${kernel_release}"
-        for module in nvidia nvidia-modeset nvidia-uvm nvidia-drm; do
+        for module in nvidia nvidia-modeset nvidia-uvm; do
           find "${module_dir}" -type f -name "${module}.ko" -print -quit | grep -q . || {
             echo "Missing ${module}.ko in ${module_dir}" >&2
             exit 1
