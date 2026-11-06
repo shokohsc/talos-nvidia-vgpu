@@ -73,7 +73,14 @@ steps:
         # The vendor Makefile normally injects this define through its legacy
         # EXTRA_CFLAGS; pass it globally because this build uses modern Kbuild
         # and KCFLAGS for all translation units.
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -DNV_VERSION_STRING=\"{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}\""
+        # Keep string-valued defines in a header instead of passing quoted
+        # values through Make/Kbuild, which strips the quotes from KCFLAGS.
+        cat > /tmp/nvidia-build-defines.h <<'EOF'
+        #define NV_VERSION_STRING "{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}"
+        EOF
+
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -include linux/timer.h -include /tmp/nvidia-build-defines.h"
+        echo "Including linux/timer.h for del_timer_sync"
 
         echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
         echo "Passing NVRM and NV_VERSION_STRING={{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} through KCFLAGS"
