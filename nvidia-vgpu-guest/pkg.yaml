@@ -186,7 +186,23 @@ steps:
         # individual modules through NV_EXCLUDE_KERNEL_MODULES.
         excluded_modules="nvidia-drm"
         echo "Excluding optional kernel module(s): ${excluded_modules}"
-        make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump KCFLAGS="${extra_cflags}" NV_EXCLUDE_KERNEL_MODULES="${excluded_modules}" -j "$(nproc)" SYSSRC=/src
+        if ! make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump KCFLAGS="${extra_cflags}" NV_EXCLUDE_KERNEL_MODULES="${excluded_modules}" -j "$(nproc)" SYSSRC=/src; then
+          echo "=== NVIDIA module symbol diagnostics ===" >&2
+          for object in nvidia.o nvidia/nv-interface.o nvidia-uvm.o; do
+            if [[ -s "$object" ]]; then
+              echo "--- global UVM interface symbols in $object ---" >&2
+              llvm-nm -g "$object" 2>&1 | grep -E 'nvUvmInterface|__vma_start_write' || true
+            else
+              echo "Missing expected object: $object" >&2
+            fi
+          done
+          echo "--- generated Module.symvers entries ---" >&2
+          find /pkg/driver/kernel -name Module.symvers -type f -print -exec grep -H -E 'nvUvmInterface|__vma_start_write' {} \; 2>/dev/null || true
+          echo "--- UVM interface declarations/exports in source ---" >&2
+          grep -R -n -E 'EXPORT_SYMBOL.*nvUvmInterface|nvUvmInterfaceDupAddressSpace|nvUvmInterfaceMemoryAllocSys' /pkg/driver/kernel/nvidia /pkg/driver/kernel/nvidia-uvm 2>/dev/null | head -80 || true
+          echo "=== End NVIDIA module symbol diagnostics ===" >&2
+          exit 1
+        fi
     install:
       - |
         kernel_release="$(cat /src/include/config/kernel.release)"
