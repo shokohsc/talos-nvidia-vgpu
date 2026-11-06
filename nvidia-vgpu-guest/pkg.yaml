@@ -163,7 +163,10 @@ steps:
         #define del_timer_sync(timer) timer_delete_sync(timer)
         EOF
         echo "Mapping legacy del_timer_sync() calls to Talos timer_delete_sync()"
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -include /tmp/nvidia-timer-compat.h -include /tmp/nvidia-build-defines.h"
+        # The proprietary RM source gates the nvUvmInterface implementation behind
+        # NV_UVM_ENABLE. NVIDIA's normal build system defines it for the core
+        # module; because this build supplies KCFLAGS directly, preserve it here.
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -DNV_UVM_ENABLE -include /tmp/nvidia-timer-compat.h -include /tmp/nvidia-build-defines.h"
         echo "Force-including NVIDIA timer compatibility header"
 
         echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
