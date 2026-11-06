@@ -41,6 +41,22 @@ steps:
       - |
         cd /pkg/driver/kernel
 
+        # Linux removed follow_pfn() in 6.10. The replacement
+        # follow_pfnmap_start()/end() is GPL-only, so a proprietary NVIDIA
+        # module cannot call it without creating an unresolved GPL symbol.
+        # Match NVIDIA's compatibility fallback: report unsupported PFN
+        # lookup rather than calling the removed API or GPL-only follow_pte().
+        mlock_source="/pkg/driver/kernel/nvidia/os-mlock.c"
+        test -s "$mlock_source"
+        if grep -q 'return follow_pfn(vma, address, pfn);' "$mlock_source"; then
+          sed -i 's/return follow_pfn(vma, address, pfn);/return -1; \/\* follow_pfn() is unavailable on Linux 6.10+. *\//' "$mlock_source"
+        fi
+        if grep -q 'return follow_pfn(vma, address, pfn);' "$mlock_source"; then
+          echo "Failed to patch removed follow_pfn() call in $mlock_source" >&2
+          exit 1
+        fi
+        echo "Patched GRID 535 PFN lookup fallback for Linux 6.18"
+
         # NVIDIA's source tree has several mutually-referencing header roots
         # (common/inc, nvidia, and conftest output) from the proprietary tree.
         # Discover their actual locations from this extracted driver payload
