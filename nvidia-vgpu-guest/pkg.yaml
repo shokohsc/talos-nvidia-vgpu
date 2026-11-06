@@ -42,13 +42,43 @@ steps:
         cd /pkg/driver/kernel
 
         # Linux 6.13 changed the working directory used by external-module Kbuild.
-        # GRID 535's per-module Kbuild files define cmd_symlink as "ln -sf $< $@",
-        # which creates a relative target that is then resolved from the kernel
-        # build directory. Backport NVIDIA's 550.142 fix: resolve $< absolutely
-        # in the shared Kbuild command and remove the old per-module overrides.
+        # GRID 535 defines cmd_symlink locally as "ln -sf $< $@", which leaves
+        # a relative target. Backport NVIDIA's 550.142 fix: define the command
+        # once in the parent Kbuild and resolve the input object to an absolute
+        # path, removing the old per-module overrides.
         kbuild_file="/pkg/driver/kernel/Kbuild"
         test -s "$kbuild_file"
-        grep -q '^NV_BUILD_TYPE ?= release        # objects (nv-kernel.o_binary and nv-modeset-kernel.o_binary). GRID
+        grep -q '^NV_BUILD_TYPE ?= release$' "$kbuild_file"
+        if ! grep -Fq 'cmd_symlink = ln -sf $(abspath $<) $@' "$kbuild_file"; then
+          awk '
+            { print }
+            $0 == "NV_BUILD_TYPE ?= release" {
+              print ""
+              print "quiet_cmd_symlink = SYMLINK $@"
+              print "cmd_symlink = ln -sf $(abspath $<) $@"
+            }
+          ' "$kbuild_file" > "${kbuild_file}.tmp"
+          mv "${kbuild_file}.tmp" "$kbuild_file"
+        fi
+        for module_kbuild in \
+          /pkg/driver/kernel/nvidia/nvidia.Kbuild \
+          /pkg/driver/kernel/nvidia-modeset/nvidia-modeset.Kbuild; do
+          test -s "$module_kbuild"
+          sed -i \
+            -e '/^[[:space:]]*quiet_cmd_symlink = SYMLINK \\$@$/d' \
+            -e '/^[[:space:]]*cmd_symlink = ln -sf \\$< \\$@$/d' \
+            "$module_kbuild"
+        done
+        grep -Fq 'cmd_symlink = ln -sf $(abspath $<) $@' "$kbuild_file"
+        if grep -R -nE 'cmd_symlink = ln -sf \\$< \\$@' \
+          /pkg/driver/kernel/nvidia/nvidia.Kbuild \
+          /pkg/driver/kernel/nvidia-modeset/nvidia-modeset.Kbuild; then
+          echo "Legacy relative NVIDIA RM symlink command remains after patch" >&2
+          exit 1
+        fi
+        echo "Patched GRID 535 RM symlink command for Linux 6.13+ Kbuild"
+
+        # The proprietary module Kbuild expects the precompiled RM interface
         # packages may place these shared binary objects in kernel-open even
         # when the proprietary source tree is selected for compilation.
         # Stage the matching-version objects into the proprietary tree before
