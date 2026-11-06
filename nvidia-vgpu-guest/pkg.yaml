@@ -163,10 +163,25 @@ steps:
         #define del_timer_sync(timer) timer_delete_sync(timer)
         EOF
         echo "Mapping legacy del_timer_sync() calls to Talos timer_delete_sync()"
+
+        # Linux 6.15 moved VMA write-locking into __vma_start_write(), which
+        # is GPL-only. The proprietary GRID 535 module cannot import it.
+        # NVIDIA's mmap paths update flags on VMAs already write-locked by
+        # the mmap path, so use vm_flags_reset() (which does not acquire the
+        # lock) for these legacy vm_flags_set/clear call sites on 6.15+.
+        cat > /tmp/nvidia-vma-flags-compat.h <<'EOF'
+        #include <linux/mm.h>
+        #include <linux/version.h>
+        #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+        #define vm_flags_set(vma, flags) vm_flags_reset((vma), (vma)->vm_flags | (flags))
+        #define vm_flags_clear(vma, flags) vm_flags_reset((vma), (vma)->vm_flags & ~(flags))
+        #endif
+        EOF
+        echo "Mapping proprietary NVIDIA VMA flag updates to vm_flags_reset() on Linux 6.15+"
         # The proprietary RM source gates the nvUvmInterface implementation behind
         # NV_UVM_ENABLE. NVIDIA's normal build system defines it for the core
         # module; because this build supplies KCFLAGS directly, preserve it here.
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -DNV_UVM_ENABLE -include /tmp/nvidia-timer-compat.h -include /tmp/nvidia-build-defines.h"
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -DNV_UVM_ENABLE -include /tmp/nvidia-timer-compat.h -include /tmp/nvidia-vma-flags-compat.h -include /tmp/nvidia-build-defines.h"
         echo "Force-including NVIDIA timer compatibility header"
 
         echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
