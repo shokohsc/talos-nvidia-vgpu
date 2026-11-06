@@ -79,14 +79,18 @@ steps:
         #define NV_VERSION_STRING "{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}"
         EOF
 
-        # Use the exact Talos kernel header path. A bare -include linux/timer.h
-        # can resolve against another include root in this mixed vendor/Kbuild
-        # environment, silently leaving del_timer_sync undeclared.
+        # GRID 535 still calls del_timer_sync(), which was renamed to
+        # timer_delete_sync() in the Talos 6.18 kernel headers. Keep the
+        # vendor sources unchanged and provide the legacy API spelling.
         test -s /src/include/linux/timer.h
-        echo "Talos timer API declarations:"
-        grep -nE "del_timer_sync|timer_delete_sync" /src/include/linux/timer.h || true
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -include /src/include/linux/timer.h -include /tmp/nvidia-build-defines.h"
-        echo "Force-including /src/include/linux/timer.h for del_timer_sync"
+        grep -q "timer_delete_sync" /src/include/linux/timer.h
+        cat > /tmp/nvidia-timer-compat.h <<'EOF'
+        #include <linux/timer.h>
+        #define del_timer_sync(timer) timer_delete_sync(timer)
+        EOF
+        echo "Mapping legacy del_timer_sync() calls to Talos timer_delete_sync()"
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -include /tmp/nvidia-timer-compat.h -include /tmp/nvidia-build-defines.h"
+        echo "Force-including NVIDIA timer compatibility header"
 
         echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
         echo "Passing NVRM and NV_VERSION_STRING={{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} through KCFLAGS"
