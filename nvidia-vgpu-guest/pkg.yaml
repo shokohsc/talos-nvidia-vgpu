@@ -65,12 +65,12 @@ steps:
           /pkg/driver/kernel/nvidia-modeset/nvidia-modeset.Kbuild; do
           test -s "$module_kbuild"
           sed -i \
-            -e '/^[[:space:]]*quiet_cmd_symlink = SYMLINK \\$@$/d' \
-            -e '/^[[:space:]]*cmd_symlink = ln -sf \\$< \\$@$/d' \
+            -e '/quiet_cmd_symlink = SYMLINK/d' \
+            -e '/cmd_symlink = ln -sf/d' \
             "$module_kbuild"
         done
         grep -Fq 'cmd_symlink = ln -sf $(abspath $<) $@' "$kbuild_file"
-        if grep -R -nE 'cmd_symlink = ln -sf \\$< \\$@' \
+        if grep -Fq 'cmd_symlink = ln -sf $< $@' \
           /pkg/driver/kernel/nvidia/nvidia.Kbuild \
           /pkg/driver/kernel/nvidia-modeset/nvidia-modeset.Kbuild; then
           echo "Legacy relative NVIDIA RM symlink command remains after patch" >&2
