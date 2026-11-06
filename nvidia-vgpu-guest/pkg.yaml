@@ -41,6 +41,27 @@ steps:
       - |
         cd /pkg/driver/kernel
 
+        # The proprietary module Kbuild expects the precompiled RM interface
+        # objects (nv-kernel.o_binary and nv-modeset-kernel.o_binary). GRID
+        # packages may place these shared binary objects in kernel-open even
+        # when the proprietary source tree is selected for compilation.
+        # Stage the matching-version objects into the proprietary tree before
+        # Kbuild creates its nv-kernel.o symlink; do not substitute C sources.
+        for binary in nvidia/nv-kernel.o_binary nvidia-modeset/nv-modeset-kernel.o_binary; do
+          if [[ ! -s "$binary" ]]; then
+            shared_binary="/pkg/driver/kernel-open/$binary"
+            if [[ -s "$shared_binary" ]]; then
+              install -m 0644 "$shared_binary" "$binary"
+              echo "Staged shared NVIDIA RM object: $shared_binary -> /pkg/driver/kernel/$binary"
+            else
+              echo "Missing required NVIDIA RM object: $binary" >&2
+              echo "Available matching objects in extracted GRID payload:" >&2
+              find /pkg/driver -type f -name '*kernel.o_binary' -print >&2
+              exit 1
+            fi
+          fi
+        done
+
         # Linux removed follow_pfn() in 6.10. The replacement
         # follow_pfnmap_start()/end() is GPL-only, so a proprietary NVIDIA
         # module cannot call it without creating an unresolved GPL symbol.
