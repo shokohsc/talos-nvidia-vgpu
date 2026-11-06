@@ -83,7 +83,8 @@ steps:
         # can resolve against another include root in this mixed vendor/Kbuild
         # environment, silently leaving del_timer_sync undeclared.
         test -s /src/include/linux/timer.h
-        grep -q "del_timer_sync" /src/include/linux/timer.h
+        echo "Talos timer API declarations:"
+        grep -nE "del_timer_sync|timer_delete_sync" /src/include/linux/timer.h || true
         extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -include /src/include/linux/timer.h -include /tmp/nvidia-build-defines.h"
         echo "Force-including /src/include/linux/timer.h for del_timer_sync"
 
