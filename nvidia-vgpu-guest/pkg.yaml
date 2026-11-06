@@ -79,8 +79,13 @@ steps:
         #define NV_VERSION_STRING "{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}"
         EOF
 
-        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -include linux/timer.h -include /tmp/nvidia-build-defines.h"
-        echo "Including linux/timer.h for del_timer_sync"
+        # Use the exact Talos kernel header path. A bare -include linux/timer.h
+        # can resolve against another include root in this mixed vendor/Kbuild
+        # environment, silently leaving del_timer_sync undeclared.
+        test -s /src/include/linux/timer.h
+        grep -q "del_timer_sync" /src/include/linux/timer.h
+        extra_cflags="${include_flags[*]} -I/pkg/driver/kernel -I/pkg/driver/kernel/nvidia -I/pkg/driver/kernel/conftest -isystem ${clang_builtin_include} -DNVRM -include /src/include/linux/timer.h -include /tmp/nvidia-build-defines.h"
+        echo "Force-including /src/include/linux/timer.h for del_timer_sync"
 
         echo "Using kernel-compatible stdint shim in ${clang_builtin_include}"
         echo "Passing NVRM and NV_VERSION_STRING={{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }} through KCFLAGS"
