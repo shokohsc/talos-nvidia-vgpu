@@ -5,6 +5,12 @@ dependencies:
   - image: "{{ .TOOLS_IMAGE }}"
     from: /
     to: /
+  # The tools image is built from the development branch and advertises
+  # 1.13.0-alpha.2 in /etc/os-release. Overlay the actual target Talos
+  # rootfs last so extensions-validator checks the requested release.
+  - image: "ghcr.io/siderolabs/installer-base:{{ .BUILD_ARG_TALOS_VERSION }}"
+    from: /
+    to: /
   - image: "{{ .EXTENSIONS_VALIDATOR_IMAGE }}"
     from: /
     to: /
