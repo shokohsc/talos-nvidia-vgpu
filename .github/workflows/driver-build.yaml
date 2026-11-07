@@ -49,6 +49,21 @@ jobs:
             -ldflags "-X github.com/siderolabs/talos/pkg/machinery/version.Tag=v1.13.10" \
             -o "$RUNNER_TEMP/validator-image/extensions-validator" \
             ./cmd/extensions-validator
+          # Prove this binary validates against the intended release before
+          # publishing it as the validator dependency for the bldr package.
+          mkdir -p "$RUNNER_TEMP/validator-smoke/rootfs"
+          cat > "$RUNNER_TEMP/validator-smoke/manifest.yaml" <<'EOF'
+          version: v1alpha1
+          metadata:
+            name: validator-smoke
+            version: 1.0.0
+            compatibility:
+              talos:
+                version: "= v1.13.10"
+          EOF
+          "$RUNNER_TEMP/validator-image/extensions-validator" validate \
+            --rootfs="$RUNNER_TEMP/validator-smoke" \
+            --pkg-name=validator-smoke
           cp "$GITHUB_WORKSPACE/Dockerfile.extensions-validator" "$RUNNER_TEMP/validator-image/Dockerfile"
           docker buildx build \
             --platform linux/amd64 \
