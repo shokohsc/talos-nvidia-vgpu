@@ -1,0 +1,125 @@
+name: NVIDIA vGPU driver build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "feature/**"]
+    paths:
+      - "Pkgfile"
+      - "Makefile"
+      - ".dockerignore"
+      - "base/**"
+      - "Dockerfile.kernel-build"
+      - "nvidia-vgpu-guest/**"
+      - "scripts/extract-driver.sh"
+      - ".github/workflows/driver-build.yaml"
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build-extension:
+    name: Build GRID 535.161.07 for Talos v1.13.10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      PKGS_REF: 9b044c593c71b0ea6deb9985b7907e008b91220c
+      KERNEL_CACHE_KEY: talos-kernel-linux-amd64-v1.13.10-9b044c593c71b0ea6deb9985b7907e008b91220c
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract GRID installer
+        env:
+          NVIDIA_DRIVER_IMAGE: docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
+          NVIDIA_DRIVER_VERSION: "535.161.07"
+          DRIVER_SOURCE_DIR: nvidia-vgpu-guest/driver
+          WORKDIR: ${{ runner.temp }}/nvidia-vgpu-work
+        run: |
+          df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          bash scripts/extract-driver.sh
+          df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+      - name: Free runner disk space before kernel cache restore
+        run: |
+          echo "Disk usage before cleanup:"
+          df -h
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /usr/local/.ghcup \
+            /usr/local/share/chromium
+          sudo docker system prune --all --force --volumes || true
+          echo "Disk usage after cleanup:"
+          df -h
+          df -i
+      - name: Restore Talos kernel build cache
+        id: kernel-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/kernel-build
+          key: ${{ env.KERNEL_CACHE_KEY }}
+      - name: Build exact Talos kernel tree
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/siderolabs/pkgs.git "$RUNNER_TEMP/pkgs"
+          git -C "$RUNNER_TEMP/pkgs" checkout "$PKGS_REF"
+          make -C "$RUNNER_TEMP/pkgs" local-kernel-build \
+            PLATFORM=linux/amd64 \
+            DEST="$RUNNER_TEMP/kernel-build"
+      - name: Validate Talos kernel build tree
+        run: |
+          test -s "$RUNNER_TEMP/kernel-build/src/Module.symvers"
+          test -s "$RUNNER_TEMP/kernel-build/src/include/config/kernel.release"
+          cat "$RUNNER_TEMP/kernel-build/src/include/config/kernel.release" \
+            | tee "$RUNNER_TEMP/kernel-release.txt"
+      - name: Save Talos kernel build cache
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/kernel-build
+          key: ${{ env.KERNEL_CACHE_KEY }}
+      - name: Package kernel build tree as a local build image
+        run: |
+          cd "$RUNNER_TEMP"
+          export KERNEL_IMAGE="ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:v1.13.10-${PKGS_REF}"
+          echo "KERNEL_IMAGE=$KERNEL_IMAGE" >> "$GITHUB_ENV"
+          docker buildx build \
+            --platform linux/amd64 \
+            --file "$GITHUB_WORKSPACE/Dockerfile.kernel-build" \
+            --tag "$KERNEL_IMAGE" \
+            --push \
+            "$RUNNER_TEMP/kernel-build"
+      - name: Build Talos system extension
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Pkgfile \
+            --target nvidia-vgpu-guest \
+            --build-arg TALOS_VERSION=v1.13.10 \
+            --build-arg NVIDIA_DRIVER_VERSION=535.161.07 \
+            --build-arg KERNEL_IMAGE="$KERNEL_IMAGE" \
+            --output "type=oci,dest=$RUNNER_TEMP/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar" \
+            .
+      - name: Upload Talos extension OCI image
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-vgpu-535.161.07-talos-v1.13.10
+          path: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
+          if-no-files-found: error
+          retention-days: 14
+      - name: Add build metadata to job summary
+        if: always()
+        run: |
+          {
+            echo "## NVIDIA vGPU extension build"
+            echo "- GRID driver: 535.161.07"
+            echo "- Talos: v1.13.10 amd64"
+            echo "- Kernel cache: ${{ steps.kernel-cache.outputs.cache-hit || 'miss' }}"
+            echo "- Kernel: $(cat "$RUNNER_TEMP/kernel-release.txt" 2>/dev/null || echo unavailable)"
+            echo "- OCI output: nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar"
+          } >> "$GITHUB_STEP_SUMMARY"

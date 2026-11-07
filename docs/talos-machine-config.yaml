@@ -1,0 +1,8 @@
+# Example machine-config fragment. Merge with your existing Talos config.
+machine:
+  kernel:
+    modules:
+      - name: nvidia
+      - name: nvidia_uvm
+      - name: nvidia_modeset
+      - name: nvidia_drm

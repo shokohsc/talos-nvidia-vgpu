@@ -1,0 +1,20 @@
+name: base
+variant: scratch
+shell: /bin/bash
+dependencies:
+  - image: "{{ .TOOLS_IMAGE }}"
+    from: /
+    to: /
+  - image: "{{ .EXTENSIONS_VALIDATOR_IMAGE }}"
+    from: /
+    to: /
+  # The tools image and extensions-validator image can carry development
+  # metadata (1.13.0-alpha.2). Overlay the exact target installer rootfs
+  # last so extensions-validator reads the requested Talos release from
+  # /etc/os-release instead of the version embedded in a build-tools image.
+  - image: "ghcr.io/siderolabs/installer-base:{{ .BUILD_ARG_TALOS_VERSION }}"
+    from: /
+    to: /
+finalize:
+  - from: /
+    to: /

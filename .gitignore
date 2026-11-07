@@ -1,0 +1,8 @@
+_out/
+_work/
+dist/
+nvidia-vgpu-guest/driver/
+*.run
+*.ko
+*.ko.xz
+*.ko.zst
