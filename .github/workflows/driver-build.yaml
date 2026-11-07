@@ -9,6 +9,7 @@ on:
       - ".dockerignore"
       - "base/**"
       - "Dockerfile.kernel-build"
+      - "Dockerfile.extensions-validator"
       - "nvidia-vgpu-guest/**"
       - "scripts/extract-driver.sh"
       - ".github/workflows/driver-build.yaml"
@@ -31,6 +32,30 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.6"
+      - name: Build extensions validator against Talos v1.13.10
+        env:
+          VALIDATOR_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0
+        run: |
+          git clone https://github.com/siderolabs/extensions-validator.git "$RUNNER_TEMP/extensions-validator"
+          git -C "$RUNNER_TEMP/extensions-validator" checkout 84cecb0
+          cd "$RUNNER_TEMP/extensions-validator"
+          go mod edit -require=github.com/siderolabs/talos/pkg/machinery@v1.13.10
+          go mod tidy
+          mkdir -p "$RUNNER_TEMP/validator-image"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+            -ldflags "-X github.com/siderolabs/talos/pkg/machinery/version.Tag=v1.13.10" \
+            -o "$RUNNER_TEMP/validator-image/extensions-validator" \
+            ./cmd/extensions-validator
+          cp "$GITHUB_WORKSPACE/Dockerfile.extensions-validator" "$RUNNER_TEMP/validator-image/Dockerfile"
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag "$VALIDATOR_IMAGE" \
+            --push \
+            "$RUNNER_TEMP/validator-image"
+          echo "Built $VALIDATOR_IMAGE with Talos machinery v1.13.10"
       - name: Extract GRID installer
         env:
           NVIDIA_DRIVER_IMAGE: docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
