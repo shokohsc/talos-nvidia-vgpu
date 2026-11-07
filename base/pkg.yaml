@@ -5,14 +5,10 @@ dependencies:
   - image: "{{ .TOOLS_IMAGE }}"
     from: /
     to: /
-  - image: "{{ .EXTENSIONS_VALIDATOR_IMAGE }}"
-    from: /
-    to: /
-  # The tools image and extensions-validator image can carry development
-  # metadata (1.13.0-alpha.2). Overlay the exact target installer rootfs
-  # last so extensions-validator reads the requested Talos release from
-  # /etc/os-release instead of the version embedded in a build-tools image.
-  - image: "ghcr.io/siderolabs/installer-base:{{ .BUILD_ARG_TALOS_VERSION }}"
+  # This validator is built from the pinned upstream source with Talos
+  # pkg/machinery v1.13.10. The old 84cecb0 image embeds v1.13.0-alpha.2
+  # in version.Tag, so it validates against the wrong Talos release.
+  - image: "ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0"
     from: /
     to: /
 finalize:
