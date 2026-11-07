@@ -5,7 +5,6 @@ vars:
   LLVM_IMAGE: ghcr.io/siderolabs/llvm
   TOOLS_REV: v1.13.0-12-gc70be08
   TOOLS_IMAGE: ghcr.io/siderolabs/tools:v1.13.0-12-gc70be08
-  EXTENSIONS_VALIDATOR_IMAGE: ghcr.io/siderolabs/extensions-validator:84cecb0
 labels:
   org.opencontainers.image.source: https://github.com/shokohsc/talos-nvidia-vgpu
   org.opencontainers.image.description: NVIDIA vGPU guest driver system extension for Talos Linux
