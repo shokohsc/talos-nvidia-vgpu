@@ -5,10 +5,10 @@ NVIDIA_DRIVER_IMAGE ?= docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
 PKGS_REF ?= 9b044c593c71b0ea6deb9985b7907e008b91220c
 PKGS_DIR ?= _out/pkgs
 KERNEL_BUILD_DIR ?= _out/kernel-build
-KERNEL_IMAGE ?= ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:v1.13.10
+KERNEL_IMAGE ?= docker.io/shokohsc/talos-nvidia-vgpu-kernel-build:v1.13.10
 EXTENSION_IMAGE ?= _out/nvidia-vgpu-$(NVIDIA_DRIVER_VERSION)-talos-$(TALOS_VERSION).oci.tar
 
-.PHONY: extract-driver kernel-build build local clean
+.PHONY: extract-driver kernel-build build installer-image local clean
 
 require-%:
 	@test -n "$($*)" || (echo "ERROR: $* is required" >&2; exit 2)
@@ -38,6 +38,10 @@ build: require-KERNEL_IMAGE
 		--build-arg NVIDIA_DRIVER_VERSION="$(NVIDIA_DRIVER_VERSION)" \
 		--build-arg KERNEL_IMAGE="$(KERNEL_IMAGE)" \
 		--output "type=oci,dest=$(EXTENSION_IMAGE)" .
+
+installer-image: build
+	TALOS_VERSION="$(TALOS_VERSION)" EXTENSION_IMAGE="$(EXTENSION_IMAGE)" \
+	bash scripts/build-installer-image.sh
 
 local: build
 
