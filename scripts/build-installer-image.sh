@@ -18,6 +18,18 @@
 #                         e.g. ghcr.io/<user>/metal-installer:v1.13.10
 set -euo pipefail
 
+if ! command -v crane >/dev/null 2>&1; then
+  case "$(uname -m)" in
+    x86_64) crane_arch=x86_64 ;;
+    aarch64) crane_arch=arm64 ;;
+    *) echo "ERROR: unsupported arch $(uname -m) for crane install" >&2; exit 2 ;;
+  esac
+  crane_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_${crane_arch}.tar.gz" \
+    | tar -xz -C "$crane_dir" crane
+  export PATH="$crane_dir:$PATH"
+fi
+
 TALOS_VERSION="${TALOS_VERSION:-v1.13.10}"
 EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.oci.tar}"
 OUT_DIR="${OUT_DIR:-_out}"
