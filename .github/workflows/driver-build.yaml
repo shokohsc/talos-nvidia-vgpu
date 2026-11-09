@@ -11,7 +11,8 @@ on:
       - "Dockerfile.kernel-build"
       - "Dockerfile.extensions-validator"
       - "nvidia-vgpu-guest/**"
-      - "scripts/extract-driver.sh"
+       - "scripts/extract-driver.sh"
+       - "scripts/build-installer-image.sh"
       - ".github/workflows/driver-build.yaml"
 permissions:
   contents: read
@@ -143,15 +144,30 @@ jobs:
             --build-arg TALOS_VERSION=v1.13.10 \
             --build-arg NVIDIA_DRIVER_VERSION=535.161.07 \
             --build-arg KERNEL_IMAGE="$KERNEL_IMAGE" \
-            --output "type=oci,dest=$RUNNER_TEMP/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar" \
-            .
-      - name: Upload Talos extension OCI image
-        uses: actions/upload-artifact@v4
-        with:
-          name: nvidia-vgpu-535.161.07-talos-v1.13.10
-          path: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
-          if-no-files-found: error
-          retention-days: 14
+             --output "type=oci,dest=$RUNNER_TEMP/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar" \
+             --output "type=docker,dest=$RUNNER_TEMP/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar" \
+             .
+       - name: Upload Talos extension OCI image
+         uses: actions/upload-artifact@v4
+         with:
+           name: nvidia-vgpu-535.161.07-talos-v1.13.10
+           path: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
+           if-no-files-found: error
+           retention-days: 14
+       - name: Build custom installer image with official and nvidia extensions
+         env:
+           TALOS_VERSION: v1.13.10
+           EXTENSION_IMAGE: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar
+           OUT_DIR: ${{ runner.temp }}/installer-out
+         run: |
+           bash scripts/build-installer-image.sh
+       - name: Upload custom installer image
+         uses: actions/upload-artifact@v4
+         with:
+           name: metal-installer-v1.13.10
+           path: ${{ runner.temp }}/installer-out/metal-amd64-installer.tar
+           if-no-files-found: error
+           retention-days: 14
       - name: Add build metadata to job summary
         if: always()
         run: |
@@ -161,5 +177,6 @@ jobs:
             echo "- Talos: v1.13.10 amd64"
             echo "- Kernel cache: ${{ steps.kernel-cache.outputs.cache-hit || 'miss' }}"
             echo "- Kernel: $(cat "$RUNNER_TEMP/kernel-release.txt" 2>/dev/null || echo unavailable)"
-            echo "- OCI output: nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar"
+             echo "- OCI output: nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar"
+             echo "- Installer image: metal-installer-v1.13.10 (official extensions + nvidia-vgpu)"
           } >> "$GITHUB_STEP_SUMMARY"
