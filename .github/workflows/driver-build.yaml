@@ -11,8 +11,8 @@ on:
       - "Dockerfile.kernel-build"
       - "Dockerfile.extensions-validator"
       - "nvidia-vgpu-guest/**"
-       - "scripts/extract-driver.sh"
-       - "scripts/build-installer-image.sh"
+      - "scripts/extract-driver.sh"
+      - "scripts/build-installer-image.sh"
       - ".github/workflows/driver-build.yaml"
 permissions:
   contents: read
