@@ -102,6 +102,19 @@ docker run --rm -i \
   "ghcr.io/siderolabs/imager:${TALOS_VERSION}" \
   - < "$profile"
 
+# Talos imager's raw installer output is named installer-amd64.tar.
+# Keep the stable filename consumed by the workflow artifact upload and
+# optional crane push.
+IMAGER_OUTPUT="$OUT_DIR_ABS/installer-amd64.tar"
+INSTALLER_TAR="$OUT_DIR_ABS/metal-amd64-installer.tar"
+test -s "$IMAGER_OUTPUT" || {
+  echo "ERROR: expected imager output $IMAGER_OUTPUT was not created" >&2
+  echo "Contents of $OUT_DIR_ABS:" >&2
+  ls -lah "$OUT_DIR_ABS" >&2
+  exit 2
+}
+mv "$IMAGER_OUTPUT" "$INSTALLER_TAR"
+
 if [ -n "${INSTALLER_IMAGE:-}" ]; then
   crane push "$OUT_DIR_ABS/metal-amd64-installer.tar" "$INSTALLER_IMAGE"
   echo "Installer image: $INSTALLER_IMAGE"
