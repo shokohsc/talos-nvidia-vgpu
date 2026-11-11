@@ -11,10 +11,10 @@
 #   EXTENSION_IMAGE       nvidia extension image tar (docker-save format),
 #                         default _out/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
 #   OUT_DIR               default _out
-#   CUSTOM_EXTENSION_REF  if set, the extension tar is pushed here with crane
-#                         and referenced by imageRef; if unset, the local tar
-#                         is used via tarballPath (no registry needed)
-#   INSTALLER_IMAGE       if set, the built installer tar is pushed here,
+#   CUSTOM_EXTENSION_REF  if set, push the extension tar with crane and use
+#                         imageRef (recommended for CI); otherwise use a
+#                         locally mounted docker-save tarballPath
+#   INSTALLER_IMAGE       if set, push the built installer tar here,
 #                         e.g. ghcr.io/<user>/metal-installer:v1.13.10
 set -euo pipefail
 
@@ -25,13 +25,13 @@ if ! command -v crane >/dev/null 2>&1; then
     *) echo "ERROR: unsupported arch $(uname -m) for crane install" >&2; exit 2 ;;
   esac
   crane_dir="$(mktemp -d)"
-  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_${crane_arch}.tar.gz" \
+  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-container-registry_Linux_${crane_arch}.tar.gz" \
     | tar -xz -C "$crane_dir" crane
   export PATH="$crane_dir:$PATH"
 fi
 
 TALOS_VERSION="${TALOS_VERSION:-v1.13.10}"
-EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.oci.tar}"
+EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.docker.tar}"
 OUT_DIR="${OUT_DIR:-_out}"
 
 OFFICIAL_EXTENSIONS=(
@@ -46,17 +46,22 @@ OFFICIAL_EXTENSIONS=(
 
 test -s "$EXTENSION_IMAGE" || { echo "ERROR: $EXTENSION_IMAGE missing; run 'make build' first" >&2; exit 2; }
 mkdir -p "$OUT_DIR"
+OUT_DIR_ABS="$(cd "$OUT_DIR" && pwd)"
 
 if [ -n "${CUSTOM_EXTENSION_REF:-}" ]; then
+  # Publish the custom extension first; the imager will resolve it through
+  # the same GHCR credentials mounted below.
   crane push "$EXTENSION_IMAGE" "$CUSTOM_EXTENSION_REF"
   custom_ext="    - imageRef: ${CUSTOM_EXTENSION_REF}"
 else
-  # tarballPath expects a docker-save tarball; build with
-  # --output type=docker,dest=... when EXTENSION_IMAGE is not an OCI layout.
+  # tarballPath expects a docker-save tarball. Mount the actual file only in
+  # this fallback mode; mounting a file at a path that already exists as a
+  # directory in the imager image can otherwise produce a directory mount.
+  EXTENSION_IMAGE_ABS="$(cd "$(dirname "$EXTENSION_IMAGE")" && pwd)/$(basename "$EXTENSION_IMAGE")"
   custom_ext="    - tarballPath: /extension/ext.tar"
 fi
 
-profile="$OUT_DIR/installer-profile.yaml"
+profile="$OUT_DIR_ABS/installer-profile.yaml"
 {
   echo "arch: amd64"
   echo "platform: metal"
@@ -81,21 +86,25 @@ profile="$OUT_DIR/installer-profile.yaml"
   echo "  outFormat: raw"
 } > "$profile"
 
+docker_args=(-v "$OUT_DIR_ABS:/out")
+if [ -z "${CUSTOM_EXTENSION_REF:-}" ]; then
+  docker_args+=(-v "$EXTENSION_IMAGE_ABS:/extension/ext.tar:ro")
+fi
+
 auth_mount=()
 if [ -f "$HOME/.docker/config.json" ]; then
   auth_mount=(-v "$HOME/.docker/config.json:/root/.docker/config.json:ro")
 fi
 
 docker run --rm -i \
-  -v "$PWD/$OUT_DIR:/out" \
-  -v "$PWD/$EXTENSION_IMAGE:/extension/ext.tar:ro" \
+  "${docker_args[@]}" \
   "${auth_mount[@]}" \
   "ghcr.io/siderolabs/imager:${TALOS_VERSION}" \
   - < "$profile"
 
 if [ -n "${INSTALLER_IMAGE:-}" ]; then
-  crane push "$OUT_DIR/metal-amd64-installer.tar" "$INSTALLER_IMAGE"
+  crane push "$OUT_DIR_ABS/metal-amd64-installer.tar" "$INSTALLER_IMAGE"
   echo "Installer image: $INSTALLER_IMAGE"
 else
-  echo "Installer tar: $OUT_DIR/metal-amd64-installer.tar"
+  echo "Installer tar: $OUT_DIR_ABS/metal-amd64-installer.tar"
 fi
