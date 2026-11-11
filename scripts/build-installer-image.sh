@@ -25,7 +25,7 @@ if ! command -v crane >/dev/null 2>&1; then
     *) echo "ERROR: unsupported arch $(uname -m) for crane install" >&2; exit 2 ;;
   esac
   crane_dir="$(mktemp -d)"
-  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-container-registry_Linux_${crane_arch}.tar.gz" \
+  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_${crane_arch}.tar.gz" \
     | tar -xz -C "$crane_dir" crane
   export PATH="$crane_dir:$PATH"
 fi
