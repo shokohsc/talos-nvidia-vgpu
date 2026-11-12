@@ -159,6 +159,7 @@ jobs:
           TALOS_VERSION: v1.13.10
           EXTENSION_IMAGE: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar
           CUSTOM_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-extension:535.161.07-talos-v1.13.10
+          INSTALLER_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-installer:v1.13.10
           OUT_DIR: ${{ runner.temp }}/installer-out
         run: |
           bash scripts/build-installer-image.sh
