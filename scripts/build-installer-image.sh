@@ -69,6 +69,10 @@ profile="$OUT_DIR_ABS/installer-profile.yaml"
   echo "version: ${TALOS_VERSION}"
   echo "customization:"
   echo "  extraKernelArgs:"
+  # Talos supplies module.sig_enforce=1 by default. Remove that argument
+  # before adding the permissive override; appending =0 alone cannot undo =1
+  # because Linux treats this parameter as enable-only.
+  echo "    - -module.sig_enforce"
   echo "    - module.sig_enforce=0"
   echo "input:"
   echo "  kernel:"
