@@ -159,7 +159,6 @@ jobs:
           TALOS_VERSION: v1.13.10
           EXTENSION_IMAGE: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar
           CUSTOM_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-extension:535.161.07-talos-v1.13.10
-          INSTALLER_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-installer:v1.13.10
           OUT_DIR: ${{ runner.temp }}/installer-out
         run: |
           bash scripts/build-installer-image.sh
@@ -170,6 +169,47 @@ jobs:
           path: ${{ runner.temp }}/installer-out/metal-amd64-installer.tar
           if-no-files-found: error
           retention-days: 14
+      - name: Load and publish installer image to GHCR
+        id: publish-installer
+        env:
+          INSTALLER_TAR: ${{ runner.temp }}/installer-out/metal-amd64-installer.tar
+          INSTALLER_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-installer
+          STABLE_TAG: v1.13.10
+        run: |
+          set -euo pipefail
+
+          test -s "$INSTALLER_TAR"
+          echo "Loading Talos installer Docker archive: $INSTALLER_TAR"
+          load_output="$(docker load --input "$INSTALLER_TAR")"
+          printf '%s\\n' "$load_output"
+
+          # The imager archive contains a Docker image. Re-tag that loaded
+          # image with this workflow's source commit so every build is immutable.
+          loaded_image="$(printf '%s\\n' "$load_output" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+          if [ -z "$loaded_image" ]; then
+            echo "ERROR: docker load did not report a loaded image tag" >&2
+            exit 1
+          fi
+
+          short_sha="$(git rev-parse --short=7 "$GITHUB_SHA")"
+          commit_ref="${INSTALLER_IMAGE}:${short_sha}"
+          stable_ref="${INSTALLER_IMAGE}:${STABLE_TAG}"
+
+          docker tag "$loaded_image" "$commit_ref"
+          docker push "$commit_ref"
+
+          # Keep the version alias convenient, while the short-SHA tag remains
+          # the immutable build identifier to use in Talos machine config.
+          docker tag "$loaded_image" "$stable_ref"
+          docker push "$stable_ref"
+
+          echo "image_ref=$commit_ref" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Published Talos installer"
+            echo "- Commit-pinned image: `$commit_ref`"
+            echo "- Version alias: `$stable_ref`"
+            echo "- Source image loaded from: `$INSTALLER_TAR`"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Add build metadata to job summary
         if: always()
         run: |
@@ -180,5 +220,5 @@ jobs:
             echo "- Kernel cache: ${{ steps.kernel-cache.outputs.cache-hit || 'miss' }}"
             echo "- Kernel: $(cat "$RUNNER_TEMP/kernel-release.txt" 2>/dev/null || echo unavailable)"
             echo "- OCI output: nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar"
-            echo "- Installer image: metal-installer-v1.13.10 (official extensions + nvidia-vgpu)"
+            echo "- Installer tar artifact: metal-installer-v1.13.10"
           } >> "$GITHUB_STEP_SUMMARY"
