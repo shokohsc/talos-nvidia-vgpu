@@ -5,4 +5,3 @@ machine:
       - name: nvidia
       - name: nvidia_uvm
       - name: nvidia_modeset
-      - name: nvidia_drm
