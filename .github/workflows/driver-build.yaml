@@ -181,11 +181,11 @@ jobs:
           test -s "$INSTALLER_TAR"
           echo "Loading Talos installer Docker archive: $INSTALLER_TAR"
           load_output="$(docker load --input "$INSTALLER_TAR")"
-          printf '%s\\n' "$load_output"
+          printf '%s\n' "$load_output"
 
           # The imager archive contains a Docker image. Re-tag that loaded
           # image with this workflow's source commit so every build is immutable.
-          loaded_image="$(printf '%s\\n' "$load_output" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+          loaded_image="$(printf '%s\n' "$load_output" | sed -n 's/^Loaded image: //p' | tail -n 1)"
           if [ -z "$loaded_image" ]; then
             echo "ERROR: docker load did not report a loaded image tag" >&2
             exit 1
