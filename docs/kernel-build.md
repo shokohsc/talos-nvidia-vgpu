@@ -56,7 +56,7 @@ Before packaging, require all of the following:
 
 1. `modinfo -F vermagic` matches the built tree's `include/config/kernel.release`.
 2. Module symbol versions resolve against the exact generated `Module.symvers`.
-3. Module signature policy is compatible with the Talos kernel and the produced modules.
+3. Talos defaults to `module.sig_enforce=1`. This experimental installer sets `module.sig_enforce=0` because the locally built external modules are signed by a build-tree key which is not trusted by the stock Talos kernel. This permits loading unknown-key modules but weakens module-signature enforcement; a production solution should rebuild the kernel with a controlled signing certificate trusted by that kernel and sign the NVIDIA modules with its matching private key.
 4. Kernel modules and all required userspace components are from the same GRID guest driver version.
 5. Runtime test on Talos v1.13.10 with an assigned vGPU succeeds; inspect NVRM logs and test CUDA or the intended graphics workload.
 
