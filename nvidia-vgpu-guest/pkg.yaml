@@ -245,6 +245,19 @@ steps:
         if [[ -n "$nvidia_smi" ]]; then
           install -m 0755 "$nvidia_smi" /rootfs/usr/bin/nvidia-smi
         fi
+
+        # NVIDIA's driver installer ships nvidia-modprobe. Talos does not
+        # provide the distro udev integration that normally creates NVIDIA
+        # character devices, so package the matching helper and invoke it
+        # from our udev rule when the nvidia character device is registered.
+        nvidia_modprobe="$(find /pkg/driver -type f -name nvidia-modprobe -perm /111 -print -quit)"
+        test -n "$nvidia_modprobe" || {
+          echo "GRID driver payload is missing executable nvidia-modprobe" >&2
+          find /pkg/driver -maxdepth 4 -iname '*modprobe*' -print >&2
+          exit 1
+        }
+        install -m 0755 "$nvidia_modprobe" /rootfs/usr/bin/nvidia-modprobe
+        install -D -m 0644 /pkg/files/60-nvidia-vgpu.rules /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         if [[ -d /pkg/driver/firmware ]]; then
           mkdir -p /rootfs/usr/lib/firmware/nvidia
           cp -a /pkg/driver/firmware/. /rootfs/usr/lib/firmware/nvidia/
@@ -265,6 +278,9 @@ steps:
         else
           echo "GRID archive has no NVML userspace files; this package currently provides kernel modules only"
         fi
+        test -x /rootfs/usr/bin/nvidia-modprobe
+        test -s /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
+        grep -Fq 'KERNEL=="nvidia"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
