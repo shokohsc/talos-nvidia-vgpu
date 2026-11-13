@@ -294,7 +294,7 @@ steps:
         modprobe_src="/pkg/driver/nvidia-modprobe-src"
         modprobe_out="${modprobe_src}/_out/talos"
         test -s "${modprobe_src}/Makefile"
-        grep -Eq '^NVIDIA_VERSION[[:space:]]*=[[:space:]]*535\\.161\\.07([[:space:]]|$)' \
+        grep -Eq '^NVIDIA_VERSION[[:space:]]*=[[:space:]]*535\.161\.07([[:space:]]|$)' \
           "${modprobe_src}/version.mk" || {
           echo "nvidia-modprobe source version does not match GRID 535.161.07" >&2
           exit 1
