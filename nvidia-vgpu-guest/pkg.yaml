@@ -14,6 +14,10 @@ dependencies:
   - image: ghcr.io/siderolabs/glibc:2.44
     from: /rootfs/usr/local
     to: /usr/local
+  # NVIDIA's installer requires ldconfig on PATH, too.
+  - image: ghcr.io/siderolabs/glibc:2.44
+    from: /rootfs/usr/bin
+    to: /usr/bin
   # The glibc extension places its ldconfig symlink in /usr/bin, separately
   # from the /usr/local runtime tree. NVIDIA's installer requires it on PATH.
   - image: ghcr.io/siderolabs/glibc:2.44
