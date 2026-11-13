@@ -259,7 +259,6 @@ steps:
           --no-questions \
           --no-kernel-modules \
           --no-kernel-module-source \
-          --no-opengl-files \
           --no-wine-files \
           --no-dkms \
           --no-systemd \
@@ -268,8 +267,10 @@ steps:
           --no-nouveau-check \
           --utility-prefix=/rootfs/usr \
           --utility-libdir=lib \
+          --opengl-prefix=/rootfs/usr \
+          --opengl-libdir=lib \
           --application-profile-path=/rootfs/usr/share/nvidia \
-          --documentation-prefix=/rootfs/usr/share/doc
+          --documentation-prefix=/rootfs/usr
 
         # NVIDIA's installer may choose a versioned NVML filename; expose the
         # stable soname expected by applications and container runtimes.
