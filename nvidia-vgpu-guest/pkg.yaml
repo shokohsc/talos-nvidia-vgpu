@@ -233,18 +233,44 @@ steps:
         make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump NV_EXCLUDE_KERNEL_MODULES=nvidia-drm -j "$(nproc)" modules_install \
           SYSSRC=/src INSTALL_MOD_PATH=/rootfs/usr INSTALL_MOD_DIR=extra INSTALL_MOD_STRIP=1
 
-        # Stage userspace files directly from the extracted GRID payload. This
-        # avoids executing the vendor's distro installer in Talos' musl build
-        # environment while preserving the driver-version-matched libraries.
-        for libdir in /pkg/driver/lib /pkg/driver/lib64; do
-          if [[ -d "$libdir" ]]; then
-            cp -a "$libdir"/. /rootfs/usr/lib/
-          fi
-        done
-        nvidia_smi="$(find /pkg/driver -type f -name nvidia-smi -print -quit)"
-        if [[ -n "$nvidia_smi" ]]; then
-          install -m 0755 "$nvidia_smi" /rootfs/usr/bin/nvidia-smi
+        # The .run image contains only the self-extracting installer. Its
+        # --extract-only output can place userspace payload directories below
+        # a versioned top-level directory, so discover lib/lib64 recursively
+        # instead of assuming they are directly under /pkg/driver.
+        # Preserve symlinks and subdirectories (including any vendor helper
+        # libraries) while installing the x86_64 userspace payload in /usr/lib.
+        mapfile -t driver_lib_dirs < <(
+          find /pkg/driver -type d \\( -name lib -o -name lib64 \\) \\
+            ! -path '/pkg/driver/kernel/*' ! -path '/pkg/driver/kernel-open/*' | sort
+        )
+        if [[ "${#driver_lib_dirs[@]}" -eq 0 ]]; then
+          echo "No lib/lib64 directories found in extracted GRID installer payload" >&2
+          find /pkg/driver -maxdepth 4 -type d -print | sort >&2
+          exit 1
         fi
+        for libdir in "${driver_lib_dirs[@]}"; do
+          echo "Installing GRID userspace libraries from ${libdir}"
+          cp -a "${libdir}/." /rootfs/usr/lib/
+        done
+
+        # NVML is required for nvidia-smi and the NVIDIA container runtime.
+        # Ensure the standard soname exists even if the vendor archive only
+        # includes the fully versioned shared object.
+        nvml_real="$(find /rootfs/usr/lib -type f -name 'libnvidia-ml.so.*' -print -quit)"
+        test -n "$nvml_real" || {
+          echo "GRID installer extraction is missing libnvidia-ml.so.*" >&2
+          find /pkg/driver -type f -name 'libnvidia-ml.so*' -print >&2
+          exit 1
+        }
+        ln -sfn "$(basename "$nvml_real")" /rootfs/usr/lib/libnvidia-ml.so.1
+
+        nvidia_smi="$(find /pkg/driver -type f -name nvidia-smi -print -quit)"
+        test -n "$nvidia_smi" || {
+          echo "GRID installer extraction is missing nvidia-smi" >&2
+          find /pkg/driver -maxdepth 5 -type f -iname '*nvidia*smi*' -print >&2
+          exit 1
+        }
+        install -m 0755 "$nvidia_smi" /rootfs/usr/bin/nvidia-smi
 
         # NVIDIA's driver installer ships nvidia-modprobe. Talos does not
         # provide the distro udev integration that normally creates NVIDIA
@@ -273,15 +299,19 @@ steps:
             exit 1
           }
         done
-        if find /rootfs/usr/lib -type f -name 'libnvidia-ml.so*' -print -quit | grep -q .; then
-          test -x /rootfs/usr/bin/nvidia-smi
-        else
-          echo "GRID archive has no NVML userspace files; this package currently provides kernel modules only"
-        fi
+        test -e /rootfs/usr/lib/libnvidia-ml.so.1 || {
+          echo "Missing usable NVML soname /usr/lib/libnvidia-ml.so.1" >&2
+          find /rootfs/usr/lib -name 'libnvidia-ml.so*' -ls >&2
+          exit 1
+        }
+        test -x /rootfs/usr/bin/nvidia-smi || {
+          echo "Missing /usr/bin/nvidia-smi" >&2
+          exit 1
+        }
         test -x /rootfs/usr/bin/nvidia-modprobe
         test -s /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         grep -Fq 'ACTION=="add|bind"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
-        grep -Fq 'RUN+="/usr/bin/nvidia-modprobe -c0 -u"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
+        grep -Fq 'RUN+="/usr/bin/nvidia-modprobe -c 255 -c 0"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
