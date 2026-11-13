@@ -300,7 +300,7 @@ steps:
           exit 1
         }
         make -C "${modprobe_src}" CC=clang OUTPUTDIR=_out/talos \
-          "${modprobe_out}/nvidia-modprobe"
+          _out/talos/nvidia-modprobe
         test -x "${modprobe_out}/nvidia-modprobe"
         install -D -m 0755 "${modprobe_out}/nvidia-modprobe" \
           /rootfs/usr/bin/nvidia-modprobe
