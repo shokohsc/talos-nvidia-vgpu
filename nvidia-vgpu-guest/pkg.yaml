@@ -273,10 +273,19 @@ steps:
           --application-profile-path=/rootfs/usr/share/nvidia \
           --documentation-prefix=/rootfs/usr
 
-        # This diagnostic helper is not needed at runtime and is rejected by
-        # the Talos extension path allowlist. Keep the runtime GPU utilities,
-        # but omit the installer-provided bug-report shell script.
-        rm -f /rootfs/usr/bin/nvidia-bug-report.sh
+        # The GRID installer drops a broad set of optional NVIDIA utilities
+        # into /usr/bin. Talos extensions have a strict path allowlist; retain
+        # only the two guest-facing tools required by this package and discard
+        # the remaining installer utilities (MPS controls, debug helpers, etc.).
+        # This keeps the runtime management interface while avoiding repeated
+        # validator failures on optional binaries.
+        for utility in /rootfs/usr/bin/nvidia-*; do
+          [[ -e "${utility}" ]] || continue
+          case "${utility##*/}" in
+            nvidia-smi|nvidia-modprobe) ;;
+            *) rm -f "${utility}" ;;
+          esac
+        done
 
         # NVIDIA's installer may choose a versioned NVML filename; expose the
         # stable soname expected by applications and container runtimes.
