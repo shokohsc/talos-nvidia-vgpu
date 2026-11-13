@@ -266,9 +266,9 @@ steps:
           --no-x-check \
           --no-nouveau-check \
           --utility-prefix=/rootfs/usr \
-          --utility-libdir=lib \
+          --utility-libdir=local/lib \
           --opengl-prefix=/rootfs/usr \
-          --opengl-libdir=lib \
+          --opengl-libdir=local/lib \
           --no-install-libglvnd \
           --application-profile-path=/rootfs/usr/share/nvidia \
           --documentation-prefix=/rootfs/usr
@@ -319,13 +319,13 @@ steps:
 
         # NVIDIA's installer may choose a versioned NVML filename; expose the
         # stable soname expected by applications and container runtimes.
-        nvml_real="$(find /rootfs/usr/lib -type f -name 'libnvidia-ml.so.*' -print -quit)"
+        nvml_real="$(find /rootfs/usr/local/lib -type f -name 'libnvidia-ml.so.*' -print -quit)"
         test -n "$nvml_real" || {
-          echo "NVIDIA installer did not install libnvidia-ml.so.* into /rootfs/usr/lib" >&2
+          echo "NVIDIA installer did not install libnvidia-ml.so.* into /rootfs/usr/local/lib" >&2
           find /rootfs -iname '*nvidia-ml*' -o -name 'nvidia-smi' >&2
           exit 1
         }
-        ln -sfn "$(basename "$nvml_real")" /rootfs/usr/lib/libnvidia-ml.so.1
+        ln -sfn "$(basename "$nvml_real")" /rootfs/usr/local/lib/libnvidia-ml.so.1
 
         test -x /rootfs/usr/bin/nvidia-smi || {
           echo "NVIDIA installer did not install /rootfs/usr/bin/nvidia-smi" >&2
@@ -370,9 +370,9 @@ steps:
             exit 1
           }
         done
-        test -e /rootfs/usr/lib/libnvidia-ml.so.1 || {
-          echo "Missing usable NVML soname /usr/lib/libnvidia-ml.so.1" >&2
-          find /rootfs/usr/lib -name 'libnvidia-ml.so*' -ls >&2
+        test -e /rootfs/usr/local/lib/libnvidia-ml.so.1 || {
+          echo "Missing usable NVML soname /usr/local/lib/libnvidia-ml.so.1" >&2
+          find /rootfs/usr/local/lib -name 'libnvidia-ml.so*' -ls >&2
           exit 1
         }
         test -x /rootfs/usr/bin/nvidia-smi || {
