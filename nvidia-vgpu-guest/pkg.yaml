@@ -233,56 +233,51 @@ steps:
         make CC=clang HOSTCC=clang LLVM=1 LD=ld.lld OBJDUMP=llvm-objdump NV_EXCLUDE_KERNEL_MODULES=nvidia-drm -j "$(nproc)" modules_install \
           SYSSRC=/src INSTALL_MOD_PATH=/rootfs/usr INSTALL_MOD_DIR=extra INSTALL_MOD_STRIP=1
 
-        # The .run image contains only the self-extracting installer. Its
-        # --extract-only output can place userspace payload directories below
-        # a versioned top-level directory, so discover lib/lib64 recursively
-        # instead of assuming they are directly under /pkg/driver.
-        # Preserve symlinks and subdirectories (including any vendor helper
-        # libraries) while installing the x86_64 userspace payload in /usr/lib.
-        mapfile -t driver_lib_dirs < <(
-          find /pkg/driver -type d \( -name lib -o -name lib64 \) \
-            ! -path '/pkg/driver/kernel/*' ! -path '/pkg/driver/kernel-open/*' | sort
-        )
-        if [[ "${#driver_lib_dirs[@]}" -eq 0 ]]; then
-          echo "No lib/lib64 directories found in extracted GRID installer payload" >&2
-          find /pkg/driver -maxdepth 4 -type d -print | sort >&2
-          exit 1
-        fi
-        for libdir in "${driver_lib_dirs[@]}"; do
-          echo "Installing GRID userspace libraries from ${libdir}"
-          cp -a "${libdir}/." /rootfs/usr/lib/
-        done
+        # --extract-only intentionally exposes the kernel source tree, but
+        # NVIDIA keeps the userspace utilities and libraries in installer
+        # payload components. Run the vendor installer in userspace-only mode
+        # and redirect its utility prefix into this extension's rootfs.
+        # Kernel modules are built and installed separately above, against the
+        # exact Talos kernel tree.
+        /pkg/driver/nvidia-installer \
+          --silent \
+          --no-questions \
+          --no-kernel-modules \
+          --no-kernel-module-source \
+          --no-opengl-files \
+          --no-wine-files \
+          --no-dkms \
+          --no-systemd \
+          --no-distro-scripts \
+          --no-x-check \
+          --no-nouveau-check \
+          --skip-module-load \
+          --skip-depmod \
+          --utility-prefix=/rootfs/usr \
+          --utility-libdir=lib \
+          --application-profile-path=/rootfs/usr/share/nvidia \
+          --documentation-prefix=/rootfs/usr/share/doc
 
-        # NVML is required for nvidia-smi and the NVIDIA container runtime.
-        # Ensure the standard soname exists even if the vendor archive only
-        # includes the fully versioned shared object.
+        # NVIDIA's installer may choose a versioned NVML filename; expose the
+        # stable soname expected by applications and container runtimes.
         nvml_real="$(find /rootfs/usr/lib -type f -name 'libnvidia-ml.so.*' -print -quit)"
         test -n "$nvml_real" || {
-          echo "GRID installer extraction is missing libnvidia-ml.so.*" >&2
-          find /pkg/driver -type f -name 'libnvidia-ml.so*' -print >&2
+          echo "NVIDIA installer did not install libnvidia-ml.so.* into /rootfs/usr/lib" >&2
+          find /rootfs -iname '*nvidia-ml*' -o -name 'nvidia-smi' >&2
           exit 1
         }
         ln -sfn "$(basename "$nvml_real")" /rootfs/usr/lib/libnvidia-ml.so.1
 
-        nvidia_smi="$(find /pkg/driver -type f -name nvidia-smi -print -quit)"
-        test -n "$nvidia_smi" || {
-          echo "GRID installer extraction is missing nvidia-smi" >&2
-          find /pkg/driver -maxdepth 5 -type f -iname '*nvidia*smi*' -print >&2
+        test -x /rootfs/usr/bin/nvidia-smi || {
+          echo "NVIDIA installer did not install /rootfs/usr/bin/nvidia-smi" >&2
+          find /rootfs -name nvidia-smi -print >&2
           exit 1
         }
-        install -m 0755 "$nvidia_smi" /rootfs/usr/bin/nvidia-smi
-
-        # NVIDIA's driver installer ships nvidia-modprobe. Talos does not
-        # provide the distro udev integration that normally creates NVIDIA
-        # character devices, so package the matching helper and invoke it
-        # from our udev rule when the nvidia character device is registered.
-        nvidia_modprobe="$(find /pkg/driver -type f -name nvidia-modprobe -perm /111 -print -quit)"
-        test -n "$nvidia_modprobe" || {
-          echo "GRID driver payload is missing executable nvidia-modprobe" >&2
-          find /pkg/driver -maxdepth 4 -iname '*modprobe*' -print >&2
+        test -x /rootfs/usr/bin/nvidia-modprobe || {
+          echo "NVIDIA installer did not install /rootfs/usr/bin/nvidia-modprobe" >&2
+          find /rootfs -name nvidia-modprobe -print >&2
           exit 1
         }
-        install -m 0755 "$nvidia_modprobe" /rootfs/usr/bin/nvidia-modprobe
         install -D -m 0644 /pkg/files/60-nvidia-vgpu.rules /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         if [[ -d /pkg/driver/firmware ]]; then
           mkdir -p /rootfs/usr/lib/firmware/nvidia
