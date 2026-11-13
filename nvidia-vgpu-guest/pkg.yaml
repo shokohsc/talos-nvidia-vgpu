@@ -262,8 +262,6 @@ steps:
           --no-distro-scripts \
           --no-x-check \
           --no-nouveau-check \
-          --skip-module-load \
-          --skip-depmod \
           --utility-prefix=/rootfs/usr \
           --utility-libdir=lib \
           --application-profile-path=/rootfs/usr/share/nvidia \
