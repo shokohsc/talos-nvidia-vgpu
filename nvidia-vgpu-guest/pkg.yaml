@@ -269,6 +269,7 @@ steps:
           --utility-libdir=lib \
           --opengl-prefix=/rootfs/usr \
           --opengl-libdir=lib \
+          --no-install-libglvnd \
           --application-profile-path=/rootfs/usr/share/nvidia \
           --documentation-prefix=/rootfs/usr
 
