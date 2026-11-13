@@ -4,8 +4,9 @@
 # its BDF (for example 0000:00:10.0), not "nvidia", so match its attributes
 # and bound driver instead of KERNEL=="nvidia".
 #
-# The first invocation creates the control node; -c0 creates GPU minor 0 and
-# -u creates the UVM devices. -m creates the optional modeset device.
-ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-uvm", RUN+="/usr/bin/nvidia-modprobe"
-ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-uvm", RUN+="/usr/bin/nvidia-modprobe -c0 -u"
-ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-uvm", RUN+="/usr/bin/nvidia-modprobe -m"
+# The NVIDIA frontend uses minor 255 for /dev/nvidiactl and minor 0 for
+# /dev/nvidia0. Create both explicitly; nvidia-modprobe without -c only
+# loads the module and does not create either node.
+ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", RUN+="/usr/bin/nvidia-modprobe -c 255 -c 0"
+ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-uvm", RUN+="/usr/bin/nvidia-modprobe -u"
+ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-modeset", RUN+="/usr/bin/nvidia-modprobe -m"
