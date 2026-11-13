@@ -273,6 +273,11 @@ steps:
           --application-profile-path=/rootfs/usr/share/nvidia \
           --documentation-prefix=/rootfs/usr
 
+        # This diagnostic helper is not needed at runtime and is rejected by
+        # the Talos extension path allowlist. Keep the runtime GPU utilities,
+        # but omit the installer-provided bug-report shell script.
+        rm -f /rootfs/usr/bin/nvidia-bug-report.sh
+
         # NVIDIA's installer may choose a versioned NVML filename; expose the
         # stable soname expected by applications and container runtimes.
         nvml_real="$(find /rootfs/usr/lib -type f -name 'libnvidia-ml.so.*' -print -quit)"
