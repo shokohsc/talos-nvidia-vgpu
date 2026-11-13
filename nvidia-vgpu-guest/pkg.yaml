@@ -12,7 +12,7 @@ dependencies:
   # NVIDIA's extracted installer is glibc-linked, while the package build
   # stage is musl-based. Supply the same glibc runtime used by Talos.
   - image: ghcr.io/siderolabs/glibc:2.44
-    from: /usr/local
+    from: /rootfs/usr/local
     to: /usr/local
 steps:
   - env:
