@@ -307,10 +307,10 @@ steps:
         # headless compute/vGPU guest: it does not ship the NVIDIA DRM/KMS
         # integration or a GLVND display stack. Remove matching entries,
         # including dangling symlinks, while retaining NVML and CUDA libraries.
-        for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGL_nvidia.so*'; do
+        for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGLX_indirect.so*' 'libGL_nvidia.so*'; do
           find /rootfs/usr/lib -maxdepth 1 -name "$pattern" -exec rm -f {} +
         done
-        for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGL_nvidia.so*'; do
+        for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGLX_indirect.so*' 'libGL_nvidia.so*'; do
           if find /rootfs/usr/lib -maxdepth 1 -name "$pattern" -print -quit | grep -q .; then
             echo "Unsupported NVIDIA display library remains: $pattern" >&2
             exit 1
