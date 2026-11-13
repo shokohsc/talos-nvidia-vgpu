@@ -280,7 +280,8 @@ steps:
         # This keeps the runtime management interface while avoiding repeated
         # validator failures on optional binaries.
         for utility in /rootfs/usr/bin/nvidia-*; do
-          [[ -e "${utility}" ]] || continue
+          # Include dangling symlinks: the validator checks their paths too.
+          [[ -e "${utility}" || -L "${utility}" ]] || continue
           case "${utility##*/}" in
             nvidia-smi|nvidia-modprobe) ;;
             *) rm -f "${utility}" ;;
