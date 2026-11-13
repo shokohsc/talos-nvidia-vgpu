@@ -288,6 +288,17 @@ steps:
           esac
         done
 
+        # This package deliberately excludes nvidia-drm and is headless.
+        # The GRID userspace installer nevertheless installs its optional
+        # GBM backend, which is outside Talos' extension path allowlist and
+        # cannot be used without the DRM integration. Remove the backend
+        # (including a dangling symlink) before validation.
+        gbm_backend="/rootfs/usr/lib/gbm/nvidia-drm_gbm.so"
+        if [[ -e "${gbm_backend}" || -L "${gbm_backend}" ]]; then
+          rm -f "${gbm_backend}"
+        fi
+        rmdir /rootfs/usr/lib/gbm 2>/dev/null || true
+
         # NVIDIA's installer may choose a versioned NVML filename; expose the
         # stable soname expected by applications and container runtimes.
         nvml_real="$(find /rootfs/usr/lib -type f -name 'libnvidia-ml.so.*' -print -quit)"
