@@ -1,12 +1,11 @@
 # NVIDIA GRID vGPU guest device nodes.
 #
-# The NVIDIA frontend registers the PCI device with the nvidia driver, but
-# Talos does not run a desktop stack that would otherwise invoke
-# nvidia-modprobe. Match the PCI driver's bind event explicitly: KERNEL=="nvidia"
-# does not match this event (its kernel name is the PCI BDF, e.g. 0000:00:10.0).
+# Match NVIDIA's upstream udev integration. The PCI device's kernel name is
+# its BDF (for example 0000:00:10.0), not "nvidia", so match its attributes
+# and bound driver instead of KERNEL=="nvidia".
 #
-# Run the helper after the driver has bound so it can create the GPU/control,
-# UVM, and modeset character devices.
-ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="nvidia", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", RUN+="/usr/bin/nvidia-modprobe"
-ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="nvidia", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", RUN+="/usr/bin/nvidia-modprobe -u"
-ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="nvidia", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", RUN+="/usr/bin/nvidia-modprobe -m"
+# The first invocation creates the control node; -c0 creates GPU minor 0 and
+# -u creates the UVM devices. -m creates the optional modeset device.
+ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-uvm", RUN+="/usr/bin/nvidia-modprobe"
+ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-uvm", RUN+="/usr/bin/nvidia-modprobe -c0 -u"
+ACTION=="add|bind", ATTR{vendor}=="0x10de", ATTR{class}=="0x03[0-9]*", DRIVER=="nvidia", TEST!="/dev/nvidia-uvm", RUN+="/usr/bin/nvidia-modprobe -m"
