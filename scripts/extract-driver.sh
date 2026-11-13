@@ -11,6 +11,7 @@ EXTRACTED="${DRIVER_SOURCE_DIR:-$WORKDIR/extracted}"
 command -v docker >/dev/null
 command -v sha256sum >/dev/null
 command -v tar >/dev/null
+command -v curl >/dev/null
 rm -rf "$WORKDIR" "$EXTRACTED"
 mkdir -p "$INSTALLER_DIR" "$(dirname "$EXTRACTED")"
 
@@ -56,6 +57,36 @@ fi
 
 echo "Extracting GRID installer payload directly to $EXTRACTED"
 "$installer" --extract-only --target "$EXTRACTED"
+
+# nvidia-modprobe is published by NVIDIA as a separate source archive. Pin
+# the exact GRID driver version and verify NVIDIA's published SHA-256 before
+# placing the source alongside the extracted GRID payload for the extension build.
+NVIDIA_MODPROBE_VERSION="535.161.07"
+NVIDIA_MODPROBE_SHA256="8f20b547ca6cdf51ef6bfde161d3c0438c6d9f16efe7f349134e6a686c2f4377"
+NVIDIA_MODPROBE_ARCHIVE="nvidia-modprobe-${NVIDIA_MODPROBE_VERSION}.tar.bz2"
+NVIDIA_MODPROBE_URL="https://download.nvidia.com/XFree86/nvidia-modprobe/${NVIDIA_MODPROBE_ARCHIVE}"
+NVIDIA_MODPROBE_DIR="$EXTRACTED/nvidia-modprobe-src"
+mkdir -p "$NVIDIA_MODPROBE_DIR"
+curl --fail --location --retry 3 --retry-all-errors \
+  "$NVIDIA_MODPROBE_URL" --output "$WORKDIR/$NVIDIA_MODPROBE_ARCHIVE"
+printf '%s  %s\\n' "$NVIDIA_MODPROBE_SHA256" "$WORKDIR/$NVIDIA_MODPROBE_ARCHIVE" \
+  | sha256sum --check
+tar -xjf "$WORKDIR/$NVIDIA_MODPROBE_ARCHIVE" -C "$NVIDIA_MODPROBE_DIR"
+modprobe_makefile="$(find "$NVIDIA_MODPROBE_DIR" -maxdepth 3 -type f -name Makefile -print -quit)"
+test -n "$modprobe_makefile" || {
+  echo "NVIDIA nvidia-modprobe source archive does not contain a Makefile" >&2
+  exit 1
+}
+modprobe_source_dir="${modprobe_makefile%/Makefile}"
+if [[ "$modprobe_source_dir" != "$NVIDIA_MODPROBE_DIR" ]]; then
+  cp -a "$modprobe_source_dir/." "$NVIDIA_MODPROBE_DIR/"
+fi
+grep -Eq '^NVIDIA_VERSION[[:space:]]*=[[:space:]]*535\\.161\\.07([[:space:]]|$)' \
+  "$NVIDIA_MODPROBE_DIR/version.mk" || {
+  echo "nvidia-modprobe source version does not match GRID $NVIDIA_MODPROBE_VERSION" >&2
+  exit 1
+}
+echo "Verified NVIDIA nvidia-modprobe source $NVIDIA_MODPROBE_VERSION"
 
 # Keep the proprietary and open-kernel source trees separate. Do not
 # synthesize kernel/common by copying headers from kernel-open/common: their
