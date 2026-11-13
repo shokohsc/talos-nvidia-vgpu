@@ -31,7 +31,7 @@ if ! command -v crane >/dev/null 2>&1; then
 fi
 
 TALOS_VERSION="${TALOS_VERSION:-v1.13.10}"
-EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.oci.tar}"
+EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.docker.tar}"
 OUT_DIR="${OUT_DIR:-_out}"
 
 OFFICIAL_EXTENSIONS=(
