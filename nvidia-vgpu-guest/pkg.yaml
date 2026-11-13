@@ -280,7 +280,8 @@ steps:
         fi
         test -x /rootfs/usr/bin/nvidia-modprobe
         test -s /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
-        grep -Fq 'ACTION=="bind", SUBSYSTEM=="pci", DRIVER=="nvidia"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
+        grep -Fq 'ACTION=="add|bind"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
+        grep -Fq 'RUN+="/usr/bin/nvidia-modprobe -c0 -u"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         mkdir -p /extensions-validator-rootfs
         cp -r /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
