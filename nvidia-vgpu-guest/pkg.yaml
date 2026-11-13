@@ -303,12 +303,19 @@ steps:
         # NVIDIA DRM/KMS module or an EGL/GLVND display stack. The userspace
         # installer still installs its EGL vendor library (often as a
         # symlink), which is outside the Talos extension path allowlist.
-        # Remove every matching entry, including dangling symlinks.
-        find /rootfs/usr/lib -maxdepth 1 -name 'libEGL_nvidia.so*' -exec rm -f {} +
-        if find /rootfs/usr/lib -maxdepth 1 -name 'libEGL_nvidia.so*' -print -quit | grep -q .; then
-          echo "Unsupported NVIDIA EGL library remains in extension rootfs" >&2
-          exit 1
-        fi
+        # Remove optional OpenGL/EGL/GLES vendor libraries. This is a
+        # headless compute/vGPU guest: it does not ship the NVIDIA DRM/KMS
+        # integration or a GLVND display stack. Remove matching entries,
+        # including dangling symlinks, while retaining NVML and CUDA libraries.
+        for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGL_nvidia.so*'; do
+          find /rootfs/usr/lib -maxdepth 1 -name "$pattern" -exec rm -f {} +
+        done
+        for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGL_nvidia.so*'; do
+          if find /rootfs/usr/lib -maxdepth 1 -name "$pattern" -print -quit | grep -q .; then
+            echo "Unsupported NVIDIA display library remains: $pattern" >&2
+            exit 1
+          fi
+        done
 
         # NVIDIA's installer may choose a versioned NVML filename; expose the
         # stable soname expected by applications and container runtimes.
