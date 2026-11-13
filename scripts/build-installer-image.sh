@@ -25,16 +25,20 @@ if ! command -v crane >/dev/null 2>&1; then
     *) echo "ERROR: unsupported arch $(uname -m) for crane install" >&2; exit 2 ;;
   esac
   crane_dir="$(mktemp -d)"
-  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_${crane_arch}.tar.gz" \
+  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-container-registry_Linux_${crane_arch}.tar.gz" \
     | tar -xz -C "$crane_dir" crane
   export PATH="$crane_dir:$PATH"
 fi
 
 TALOS_VERSION="${TALOS_VERSION:-v1.13.10}"
-EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.docker.tar}"
+EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.oci.tar}"
 OUT_DIR="${OUT_DIR:-_out}"
 
 OFFICIAL_EXTENSIONS=(
+  # nvidia-modprobe from GRID 535 is glibc-linked. Talos base uses musl,
+  # so include the matching Talos-release glibc extension to provide the
+  # /usr/lib/ld-linux-x86-64.so.2 loader and /usr/local/lib runtime.
+  glibc
   gvisor
   nfs-utils
   nfsd
