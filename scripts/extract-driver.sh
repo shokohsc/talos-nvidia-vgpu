@@ -69,7 +69,7 @@ NVIDIA_MODPROBE_DIR="$EXTRACTED/nvidia-modprobe-src"
 mkdir -p "$NVIDIA_MODPROBE_DIR"
 curl --fail --location --retry 3 --retry-all-errors \
   "$NVIDIA_MODPROBE_URL" --output "$WORKDIR/$NVIDIA_MODPROBE_ARCHIVE"
-printf '%s  %s\\n' "$NVIDIA_MODPROBE_SHA256" "$WORKDIR/$NVIDIA_MODPROBE_ARCHIVE" \
+printf '%s  %s\n' "$NVIDIA_MODPROBE_SHA256" "$WORKDIR/$NVIDIA_MODPROBE_ARCHIVE" \
   | sha256sum --check
 tar -xjf "$WORKDIR/$NVIDIA_MODPROBE_ARCHIVE" -C "$NVIDIA_MODPROBE_DIR"
 modprobe_makefile="$(find "$NVIDIA_MODPROBE_DIR" -maxdepth 3 -type f -name Makefile -print -quit)"
@@ -81,7 +81,7 @@ modprobe_source_dir="${modprobe_makefile%/Makefile}"
 if [[ "$modprobe_source_dir" != "$NVIDIA_MODPROBE_DIR" ]]; then
   cp -a "$modprobe_source_dir/." "$NVIDIA_MODPROBE_DIR/"
 fi
-grep -Eq '^NVIDIA_VERSION[[:space:]]*=[[:space:]]*535\\.161\\.07([[:space:]]|$)' \
+grep -Eq '^NVIDIA_VERSION[[:space:]]*=[[:space:]]*535\.161\.07([[:space:]]|$)' \
   "$NVIDIA_MODPROBE_DIR/version.mk" || {
   echo "nvidia-modprobe source version does not match GRID $NVIDIA_MODPROBE_VERSION" >&2
   exit 1
