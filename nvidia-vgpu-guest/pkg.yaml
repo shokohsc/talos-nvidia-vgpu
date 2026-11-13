@@ -299,6 +299,17 @@ steps:
         fi
         rmdir /rootfs/usr/lib/gbm 2>/dev/null || true
 
+        # This extension is intentionally headless and does not ship the
+        # NVIDIA DRM/KMS module or an EGL/GLVND display stack. The userspace
+        # installer still installs its EGL vendor library (often as a
+        # symlink), which is outside the Talos extension path allowlist.
+        # Remove every matching entry, including dangling symlinks.
+        find /rootfs/usr/lib -maxdepth 1 -name 'libEGL_nvidia.so*' -exec rm -f {} +
+        if find /rootfs/usr/lib -maxdepth 1 -name 'libEGL_nvidia.so*' -print -quit | grep -q .; then
+          echo "Unsupported NVIDIA EGL library remains in extension rootfs" >&2
+          exit 1
+        fi
+
         # NVIDIA's installer may choose a versioned NVML filename; expose the
         # stable soname expected by applications and container runtimes.
         nvml_real="$(find /rootfs/usr/lib -type f -name 'libnvidia-ml.so.*' -print -quit)"
