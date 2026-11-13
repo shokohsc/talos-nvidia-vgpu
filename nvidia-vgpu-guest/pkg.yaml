@@ -9,6 +9,11 @@ dependencies:
   - image: "{{ .LLVM_IMAGE }}:{{ .TOOLS_REV }}"
     from: /
     to: /
+  # NVIDIA's extracted installer is glibc-linked, while the package build
+  # stage is musl-based. Supply the same glibc runtime used by Talos.
+  - image: ghcr.io/siderolabs/glibc:v1.13.10
+    from: /usr/local
+    to: /usr/local
 steps:
   - env:
       ARCH: x86_64
@@ -239,7 +244,13 @@ steps:
         # and redirect its utility prefix into this extension's rootfs.
         # Kernel modules are built and installed separately above, against the
         # exact Talos kernel tree.
-        /pkg/driver/nvidia-installer \
+        test -x /usr/local/lib/ld-linux-x86-64.so.2 || {
+          echo "Missing Talos glibc dynamic loader at /usr/local/lib/ld-linux-x86-64.so.2" >&2
+          exit 1
+        }
+        /usr/local/lib/ld-linux-x86-64.so.2 \
+          --library-path /usr/local/lib:/lib:/usr/lib \
+          /pkg/driver/nvidia-installer \
           --silent \
           --no-questions \
           --no-kernel-modules \
