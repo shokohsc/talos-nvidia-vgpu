@@ -240,7 +240,7 @@ steps:
         # Preserve symlinks and subdirectories (including any vendor helper
         # libraries) while installing the x86_64 userspace payload in /usr/lib.
         mapfile -t driver_lib_dirs < <(
-          find /pkg/driver -type d \\( -name lib -o -name lib64 \\) \\
+          find /pkg/driver -type d \( -name lib -o -name lib64 \) \
             ! -path '/pkg/driver/kernel/*' ! -path '/pkg/driver/kernel-open/*' | sort
         )
         if [[ "${#driver_lib_dirs[@]}" -eq 0 ]]; then
