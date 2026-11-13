@@ -288,8 +288,25 @@ steps:
           find /rootfs -name nvidia-smi -print >&2
           exit 1
         }
+        # GRID 535.161.07's installer payload does not reliably install
+        # nvidia-modprobe in this userspace-only Talos package. Build NVIDIA's
+        # separately published, checksum-pinned matching source release.
+        modprobe_src="/pkg/driver/nvidia-modprobe-src"
+        modprobe_out="${modprobe_src}/_out/talos"
+        test -s "${modprobe_src}/Makefile"
+        grep -Eq '^NVIDIA_VERSION[[:space:]]*=[[:space:]]*535\\.161\\.07([[:space:]]|$)' \
+          "${modprobe_src}/version.mk" || {
+          echo "nvidia-modprobe source version does not match GRID 535.161.07" >&2
+          exit 1
+        }
+        make -C "${modprobe_src}" CC=clang OUTPUTDIR=_out/talos \
+          "${modprobe_out}/nvidia-modprobe"
+        test -x "${modprobe_out}/nvidia-modprobe"
+        install -D -m 0755 "${modprobe_out}/nvidia-modprobe" \
+          /rootfs/usr/bin/nvidia-modprobe
+
         test -x /rootfs/usr/bin/nvidia-modprobe || {
-          echo "NVIDIA installer did not install /rootfs/usr/bin/nvidia-modprobe" >&2
+          echo "Failed to build/install /rootfs/usr/bin/nvidia-modprobe" >&2
           find /rootfs -name nvidia-modprobe -print >&2
           exit 1
         }
