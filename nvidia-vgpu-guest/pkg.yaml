@@ -309,6 +309,15 @@ steps:
         fi
         rmdir /rootfs/usr/share/applications 2>/dev/null || true
 
+        # The NVIDIA installer also installs the matching nvidia-settings
+        # desktop icon. The headless extension does not ship nvidia-settings,
+        # and /usr/share/icons is not in Talos' extension path allowlist.
+        settings_icon="/rootfs/usr/share/icons/hicolor/128x128/apps/nvidia-settings.png"
+        if [[ -e "${settings_icon}" || -L "${settings_icon}" ]]; then
+          rm -f "${settings_icon}"
+        fi
+        rmdir -p /rootfs/usr/share/icons/hicolor/128x128/apps 2>/dev/null || true
+
         # Talos only permits extension payloads under its explicit rootfs
         # allowlist; /usr/share/doc is not one of those paths. Preserve the
         # NVIDIA license text under /usr/local (which is allowed), then remove
