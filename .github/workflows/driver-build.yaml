@@ -1,0 +1,224 @@
+name: NVIDIA vGPU driver build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "feature/**"]
+    paths:
+      - "Pkgfile"
+      - "Makefile"
+      - ".dockerignore"
+      - "base/**"
+      - "Dockerfile.kernel-build"
+      - "Dockerfile.extensions-validator"
+      - "nvidia-vgpu-guest/**"
+      - "scripts/extract-driver.sh"
+      - "scripts/build-installer-image.sh"
+      - ".github/workflows/driver-build.yaml"
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build-extension:
+    name: Build GRID 535.161.07 for Talos v1.13.10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      PKGS_REF: 9b044c593c71b0ea6deb9985b7907e008b91220c
+      KERNEL_CACHE_KEY: talos-kernel-linux-amd64-v1.13.10-9b044c593c71b0ea6deb9985b7907e008b91220c
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.6"
+      - name: Build extensions validator against Talos v1.13.10
+        env:
+          VALIDATOR_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0
+        run: |
+          git clone https://github.com/siderolabs/extensions-validator.git "$RUNNER_TEMP/extensions-validator"
+          git -C "$RUNNER_TEMP/extensions-validator" checkout 84cecb0
+          cd "$RUNNER_TEMP/extensions-validator"
+          go mod edit -require=github.com/siderolabs/talos/pkg/machinery@v1.13.10
+          go mod tidy
+          mkdir -p "$RUNNER_TEMP/validator-image"
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+            -ldflags "-X github.com/siderolabs/talos/pkg/machinery/version.Tag=v1.13.10" \
+            -o "$RUNNER_TEMP/validator-image/extensions-validator" \
+            ./cmd/extensions-validator
+          # Prove this binary validates against the intended release before
+          # publishing it as the validator dependency for the bldr package.
+          mkdir -p "$RUNNER_TEMP/validator-smoke/rootfs"
+          cat > "$RUNNER_TEMP/validator-smoke/manifest.yaml" <<'EOF'
+          version: v1alpha1
+          metadata:
+            name: validator-smoke
+            version: 1.0.0
+            compatibility:
+              talos:
+                version: "= v1.13.10"
+          EOF
+          "$RUNNER_TEMP/validator-image/extensions-validator" validate \
+            --rootfs="$RUNNER_TEMP/validator-smoke" \
+            --pkg-name=validator-smoke
+          cp "$GITHUB_WORKSPACE/Dockerfile.extensions-validator" "$RUNNER_TEMP/validator-image/Dockerfile"
+          docker buildx build \
+            --platform linux/amd64 \
+            --tag "$VALIDATOR_IMAGE" \
+            --push \
+            "$RUNNER_TEMP/validator-image"
+          echo "Built $VALIDATOR_IMAGE with Talos machinery v1.13.10"
+      - name: Extract GRID installer
+        env:
+          NVIDIA_DRIVER_IMAGE: docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
+          NVIDIA_DRIVER_VERSION: "535.161.07"
+          DRIVER_SOURCE_DIR: nvidia-vgpu-guest/driver
+          WORKDIR: ${{ runner.temp }}/nvidia-vgpu-work
+        run: |
+          df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+          bash scripts/extract-driver.sh
+          df -h "$RUNNER_TEMP" "$GITHUB_WORKSPACE"
+      - name: Free runner disk space before kernel cache restore
+        run: |
+          echo "Disk usage before cleanup:"
+          df -h
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /usr/local/.ghcup \
+            /usr/local/share/chromium
+          sudo docker system prune --all --force --volumes || true
+          echo "Disk usage after cleanup:"
+          df -h
+          df -i
+      - name: Restore Talos kernel build cache
+        id: kernel-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/kernel-build
+          key: ${{ env.KERNEL_CACHE_KEY }}
+      - name: Build exact Talos kernel tree
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/siderolabs/pkgs.git "$RUNNER_TEMP/pkgs"
+          git -C "$RUNNER_TEMP/pkgs" checkout "$PKGS_REF"
+          make -C "$RUNNER_TEMP/pkgs" local-kernel-build \
+            PLATFORM=linux/amd64 \
+            DEST="$RUNNER_TEMP/kernel-build"
+      - name: Validate Talos kernel build tree
+        run: |
+          test -s "$RUNNER_TEMP/kernel-build/src/Module.symvers"
+          test -s "$RUNNER_TEMP/kernel-build/src/include/config/kernel.release"
+          cat "$RUNNER_TEMP/kernel-build/src/include/config/kernel.release" \
+            | tee "$RUNNER_TEMP/kernel-release.txt"
+      - name: Save Talos kernel build cache
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/kernel-build
+          key: ${{ env.KERNEL_CACHE_KEY }}
+      - name: Package kernel build tree as a local build image
+        run: |
+          cd "$RUNNER_TEMP"
+          export KERNEL_IMAGE="ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:v1.13.10-${PKGS_REF}"
+          echo "KERNEL_IMAGE=$KERNEL_IMAGE" >> "$GITHUB_ENV"
+          docker buildx build \
+            --platform linux/amd64 \
+            --file "$GITHUB_WORKSPACE/Dockerfile.kernel-build" \
+            --tag "$KERNEL_IMAGE" \
+            --push \
+            "$RUNNER_TEMP/kernel-build"
+      - name: Build Talos system extension
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Pkgfile \
+            --target nvidia-vgpu-guest \
+            --build-arg TALOS_VERSION=v1.13.10 \
+            --build-arg NVIDIA_DRIVER_VERSION=535.161.07 \
+            --build-arg KERNEL_IMAGE="$KERNEL_IMAGE" \
+            --output "type=oci,dest=$RUNNER_TEMP/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar" \
+            --output "type=docker,dest=$RUNNER_TEMP/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar" \
+            .
+      - name: Upload Talos extension OCI image
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-vgpu-535.161.07-talos-v1.13.10
+          path: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
+          if-no-files-found: error
+          retention-days: 14
+      - name: Build custom installer image with official and nvidia extensions
+        env:
+          TALOS_VERSION: v1.13.10
+          EXTENSION_IMAGE: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar
+          CUSTOM_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-extension:535.161.07-talos-v1.13.10
+          OUT_DIR: ${{ runner.temp }}/installer-out
+        run: |
+          bash scripts/build-installer-image.sh
+      - name: Upload custom installer image
+        uses: actions/upload-artifact@v4
+        with:
+          name: metal-installer-v1.13.10
+          path: ${{ runner.temp }}/installer-out/metal-amd64-installer.tar
+          if-no-files-found: error
+          retention-days: 14
+      - name: Load and publish installer image to GHCR
+        id: publish-installer
+        env:
+          INSTALLER_TAR: ${{ runner.temp }}/installer-out/metal-amd64-installer.tar
+          INSTALLER_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-installer
+          STABLE_TAG: v1.13.10
+        run: |
+          set -euo pipefail
+
+          test -s "$INSTALLER_TAR"
+          echo "Loading Talos installer Docker archive: $INSTALLER_TAR"
+          load_output="$(docker load --input "$INSTALLER_TAR")"
+          printf '%s\n' "$load_output"
+
+          # The imager archive contains a Docker image. Re-tag that loaded
+          # image with this workflow's source commit so every build is immutable.
+          loaded_image="$(printf '%s\n' "$load_output" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+          if [ -z "$loaded_image" ]; then
+            echo "ERROR: docker load did not report a loaded image tag" >&2
+            exit 1
+          fi
+
+          short_sha="$(git rev-parse --short=7 "$GITHUB_SHA")"
+          commit_ref="${INSTALLER_IMAGE}:${short_sha}"
+          stable_ref="${INSTALLER_IMAGE}:${STABLE_TAG}"
+
+          docker tag "$loaded_image" "$commit_ref"
+          docker push "$commit_ref"
+
+          # Keep the version alias convenient, while the short-SHA tag remains
+          # the immutable build identifier to use in Talos machine config.
+          docker tag "$loaded_image" "$stable_ref"
+          docker push "$stable_ref"
+
+          echo "image_ref=$commit_ref" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Published Talos installer"
+            echo "- Commit-pinned image: `$commit_ref`"
+            echo "- Version alias: `$stable_ref`"
+            echo "- Source image loaded from: `$INSTALLER_TAR`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Add build metadata to job summary
+        if: always()
+        run: |
+          {
+            echo "## NVIDIA vGPU extension build"
+            echo "- GRID driver: 535.161.07"
+            echo "- Talos: v1.13.10 amd64"
+            echo "- Kernel cache: ${{ steps.kernel-cache.outputs.cache-hit || 'miss' }}"
+            echo "- Kernel: $(cat "$RUNNER_TEMP/kernel-release.txt" 2>/dev/null || echo unavailable)"
+            echo "- OCI output: nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar"
+            echo "- Installer tar artifact: metal-installer-v1.13.10"
+          } >> "$GITHUB_STEP_SUMMARY"

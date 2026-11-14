@@ -1,0 +1,11 @@
+version: v1alpha1
+metadata:
+  name: nvidia-vgpu-guest
+  version: "{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}-{{ .BUILD_ARG_TALOS_VERSION }}"
+  author: shokohsc
+  description: |
+    Experimental NVIDIA proprietary vGPU guest kernel modules and matching userspace
+    components for Talos Linux. Built for one exact Talos release and kernel ABI.
+  compatibility:
+    talos:
+      version: "= {{ .BUILD_ARG_TALOS_VERSION }}"

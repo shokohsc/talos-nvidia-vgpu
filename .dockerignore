@@ -1,0 +1,6 @@
+.git
+.github
+_work
+_out
+dist
+*.run

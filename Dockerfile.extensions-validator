@@ -1,0 +1,3 @@
+FROM scratch
+COPY extensions-validator /extensions-validator
+ENTRYPOINT ["/extensions-validator"]

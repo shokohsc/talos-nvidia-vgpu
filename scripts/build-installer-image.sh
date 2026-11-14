@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Build a custom Talos installer image with the official extensions plus the
+# custom nvidia-vgpu extension produced by `make build`.
+#
+# The public Image Factory only supports official extensions, so this uses
+# the imager container directly with a profile.yaml (see "Boot Assets" in the
+# Talos docs).
+#
+# Optional env:
+#   TALOS_VERSION         default v1.13.10
+#   EXTENSION_IMAGE       nvidia extension image tar (docker-save format),
+#                         default _out/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
+#   OUT_DIR               default _out
+#   CUSTOM_EXTENSION_REF  if set, push the extension tar with crane and use
+#                         imageRef (recommended for CI); otherwise use a
+#                         locally mounted docker-save tarballPath
+#   INSTALLER_IMAGE       if set, push the built installer tar here,
+#                         e.g. ghcr.io/<user>/metal-installer:v1.13.10
+set -euo pipefail
+
+if ! command -v crane >/dev/null 2>&1; then
+  case "$(uname -m)" in
+    x86_64) crane_arch=x86_64 ;;
+    aarch64) crane_arch=arm64 ;;
+    *) echo "ERROR: unsupported arch $(uname -m) for crane install" >&2; exit 2 ;;
+  esac
+  crane_dir="$(mktemp -d)"
+  curl -fsSL "https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_${crane_arch}.tar.gz" \
+    | tar -xz -C "$crane_dir" crane
+  export PATH="$crane_dir:$PATH"
+fi
+
+TALOS_VERSION="${TALOS_VERSION:-v1.13.10}"
+EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.docker.tar}"
+OUT_DIR="${OUT_DIR:-_out}"
+
+OFFICIAL_EXTENSIONS=(
+  # nvidia-modprobe from GRID 535 is glibc-linked. Talos base uses musl,
+  # so include the matching Talos-release glibc extension to provide the
+  # /usr/lib/ld-linux-x86-64.so.2 loader and /usr/local/lib runtime.
+  glibc
+  gvisor
+  nfs-utils
+  nfsd
+  qemu-guest-agent
+  stargz-snapshotter
+  uhid
+  uinput
+)
+
+test -s "$EXTENSION_IMAGE" || { echo "ERROR: $EXTENSION_IMAGE missing; run 'make build' first" >&2; exit 2; }
+mkdir -p "$OUT_DIR"
+OUT_DIR_ABS="$(cd "$OUT_DIR" && pwd)"
+
+if [ -n "${CUSTOM_EXTENSION_REF:-}" ]; then
+  # Publish the custom extension first; the imager will resolve it through
+  # the same GHCR credentials mounted below.
+  crane push "$EXTENSION_IMAGE" "$CUSTOM_EXTENSION_REF"
+  custom_ext="    - imageRef: ${CUSTOM_EXTENSION_REF}"
+else
+  # tarballPath expects a docker-save tarball. Mount the actual file only in
+  # this fallback mode; mounting a file at a path that already exists as a
+  # directory in the imager image can otherwise produce a directory mount.
+  EXTENSION_IMAGE_ABS="$(cd "$(dirname "$EXTENSION_IMAGE")" && pwd)/$(basename "$EXTENSION_IMAGE")"
+  custom_ext="    - tarballPath: /extension/ext.tar"
+fi
+
+profile="$OUT_DIR_ABS/installer-profile.yaml"
+{
+  echo "arch: amd64"
+  echo "platform: metal"
+  echo "secureboot: false"
+  echo "version: ${TALOS_VERSION}"
+  echo "customization:"
+  echo "  extraKernelArgs:"
+  # Talos supplies module.sig_enforce=1 by default. Remove that argument
+  # before adding the permissive override; appending =0 alone cannot undo =1
+  # because Linux treats this parameter as enable-only.
+  echo "    - -module.sig_enforce"
+  echo "    - module.sig_enforce=0"
+  echo "input:"
+  echo "  kernel:"
+  echo "    path: /usr/install/amd64/vmlinuz"
+  echo "  initramfs:"
+  echo "    path: /usr/install/amd64/initramfs.xz"
+  echo "  baseInstaller:"
+  echo "    imageRef: ghcr.io/siderolabs/installer:${TALOS_VERSION}"
+  echo "  systemExtensions:"
+  for name in "${OFFICIAL_EXTENSIONS[@]}"; do
+    ref="$(crane export "ghcr.io/siderolabs/extensions:${TALOS_VERSION}" | tar x -O image-digests | grep -F "ghcr.io/siderolabs/${name}:" | head -1 | tr -d '[:space:]')"
+    test -n "$ref" || { echo "ERROR: official extension siderolabs/$name not found for $TALOS_VERSION" >&2; exit 2; }
+    echo "    - imageRef: ${ref}"
+  done
+  echo "$custom_ext"
+  echo "output:"
+  echo "  kind: installer"
+  echo "  outFormat: raw"
+} > "$profile"
+
+docker_args=(-v "$OUT_DIR_ABS:/out")
+if [ -z "${CUSTOM_EXTENSION_REF:-}" ]; then
+  docker_args+=(-v "$EXTENSION_IMAGE_ABS:/extension/ext.tar:ro")
+fi
+
+auth_mount=()
+if [ -f "$HOME/.docker/config.json" ]; then
+  auth_mount=(-v "$HOME/.docker/config.json:/root/.docker/config.json:ro")
+fi
+
+docker run --rm -i \
+  "${docker_args[@]}" \
+  "${auth_mount[@]}" \
+  "ghcr.io/siderolabs/imager:${TALOS_VERSION}" \
+  - < "$profile"
+
+# Talos imager's raw installer output is named installer-amd64.tar.
+# Keep the stable filename consumed by the workflow artifact upload and
+# optional crane push.
+IMAGER_OUTPUT="$OUT_DIR_ABS/installer-amd64.tar"
+INSTALLER_TAR="$OUT_DIR_ABS/metal-amd64-installer.tar"
+test -s "$IMAGER_OUTPUT" || {
+  echo "ERROR: expected imager output $IMAGER_OUTPUT was not created" >&2
+  echo "Contents of $OUT_DIR_ABS:" >&2
+  ls -lah "$OUT_DIR_ABS" >&2
+  exit 2
+}
+mv "$IMAGER_OUTPUT" "$INSTALLER_TAR"
+
+if [ -n "${INSTALLER_IMAGE:-}" ]; then
+  crane push "$OUT_DIR_ABS/metal-amd64-installer.tar" "$INSTALLER_IMAGE"
+  echo "Installer image: $INSTALLER_IMAGE"
+else
+  echo "Installer tar: $OUT_DIR_ABS/metal-amd64-installer.tar"
+fi

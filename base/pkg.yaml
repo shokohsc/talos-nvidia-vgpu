@@ -1,0 +1,16 @@
+name: base
+variant: scratch
+shell: /bin/bash
+dependencies:
+  - image: "{{ .TOOLS_IMAGE }}"
+    from: /
+    to: /
+  # This validator is built from the pinned upstream source with Talos
+  # pkg/machinery v1.13.10. The old 84cecb0 image embeds v1.13.0-alpha.2
+  # in version.Tag, so it validates against the wrong Talos release.
+  - image: "ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0"
+    from: /
+    to: /
+finalize:
+  - from: /
+    to: /
