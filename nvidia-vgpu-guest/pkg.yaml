@@ -299,6 +299,16 @@ steps:
         fi
         rmdir /rootfs/usr/lib/gbm 2>/dev/null || true
 
+        # The vendor userspace installer also drops a desktop launcher for
+        # nvidia-settings. This package is a headless Talos compute/vGPU
+        # extension, so the GUI launcher is neither usable nor permitted by
+        # the Talos extension path allowlist.
+        settings_desktop="/rootfs/usr/share/applications/nvidia-settings.desktop"
+        if [[ -e "${settings_desktop}" || -L "${settings_desktop}" ]]; then
+          rm -f "${settings_desktop}"
+        fi
+        rmdir /rootfs/usr/share/applications 2>/dev/null || true
+
         # This extension is intentionally headless and does not ship the
         # NVIDIA DRM/KMS module or an EGL/GLVND display stack. The userspace
         # installer still installs its EGL vendor library (often as a
