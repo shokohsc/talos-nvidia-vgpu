@@ -270,7 +270,7 @@ steps:
           --opengl-prefix=/rootfs/usr \
           --opengl-libdir=local/lib \
           --no-install-libglvnd \
-          --application-profile-path=/rootfs/usr/share/nvidia \
+          --application-profile-path=/rootfs/usr/local/share/nvidia \
           --documentation-prefix=/rootfs/usr
 
         # The GRID installer drops a broad set of optional NVIDIA utilities
@@ -324,15 +324,10 @@ steps:
         # this headless runtime image does not need packaged manual pages.
         rm -rf /rootfs/usr/share/man
 
-        # NVIDIA also installs per-version key-documentation directories for
-        # its application profiles. They are documentation-only payloads,
-        # not profile data consumed by the driver; retain the profiles while
-        # removing only these unsupported documentation directories.
-        for documentation in /rootfs/usr/share/nvidia/*-key-documentation; do
-          # The installer can create these as directories or symlinks; remove both.
-          [[ -e "${documentation}" || -L "${documentation}" ]] || continue
-          rm -rf "${documentation}"
-        done
+        # Keep NVIDIA application profiles and their per-version key documentation,
+        # but place them under /usr/local/share: /usr/share/nvidia is not in
+        # Talos' system-extension rootfs allowlist. The installer receives this
+        # destination through --application-profile-path above.
 
         # Talos only permits extension payloads under its explicit rootfs
         # allowlist; /usr/share/doc is not one of those paths. Preserve the
