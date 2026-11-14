@@ -324,6 +324,13 @@ steps:
         # this headless runtime image does not need packaged manual pages.
         rm -rf /rootfs/usr/share/man
 
+        # NVIDIA also installs per-version key-documentation directories for
+        # its application profiles. They are documentation-only payloads,
+        # not profile data consumed by the driver; retain the profiles while
+        # removing only these unsupported documentation directories.
+        find /rootfs/usr/share/nvidia -mindepth 1 -maxdepth 1 \\
+          -type d -name '*-key-documentation' -prune -exec rm -rf {} + 2>/dev/null || true
+
         # Talos only permits extension payloads under its explicit rootfs
         # allowlist; /usr/share/doc is not one of those paths. Preserve the
         # NVIDIA license text under /usr/local (which is allowed), then remove
