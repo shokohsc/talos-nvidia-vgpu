@@ -309,6 +309,17 @@ steps:
         fi
         rmdir /rootfs/usr/share/applications 2>/dev/null || true
 
+        # Talos only permits extension payloads under its explicit rootfs
+        # allowlist; /usr/share/doc is not one of those paths. Preserve the
+        # NVIDIA license text under /usr/local (which is allowed), then remove
+        # the installer's documentation tree from the extension rootfs.
+        nvidia_license="/rootfs/usr/share/doc/NVIDIA_GLX-1.0/LICENSE"
+        if [[ -f "${nvidia_license}" ]]; then
+          install -D -m 0644 "${nvidia_license}" \
+            /rootfs/usr/local/share/licenses/NVIDIA_GLX-1.0/LICENSE
+        fi
+        rm -rf /rootfs/usr/share/doc
+
         # This extension is intentionally headless and does not ship the
         # NVIDIA DRM/KMS module or an EGL/GLVND display stack. The userspace
         # installer still installs its EGL vendor library (often as a
