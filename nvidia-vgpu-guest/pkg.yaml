@@ -437,7 +437,7 @@ steps:
           exit 1
         }
         gridd_dependencies="$("${gridd_loader}" --library-path "${gridd_root}/usr/local/lib:${gridd_root}/usr/lib:${gridd_root}/lib" --list "${gridd_root}/usr/bin/nvidia-gridd" 2>&1)"
-        printf '%s\\n' "${gridd_dependencies}"
+        printf '%s\n' "${gridd_dependencies}"
         if grep -Fq 'not found' <<< "${gridd_dependencies}"; then
           echo "Unresolved shared-library dependency in nvidia-gridd service rootfs" >&2
           exit 1
