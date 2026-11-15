@@ -436,7 +436,11 @@ steps:
           echo "Missing glibc loader in nvidia-gridd service rootfs" >&2
           exit 1
         }
-        gridd_dependencies="$("${gridd_loader}" --library-path "${gridd_root}/usr/local/lib:${gridd_root}/usr/lib:${gridd_root}/lib" --list "${gridd_root}/usr/bin/nvidia-gridd" 2>&1)"
+        test -s "${gridd_root}/usr/local/lib/nvidia/gridd/libFlxCore64.so" || {
+          echo "Missing NVIDIA licensing library libFlxCore64.so in service rootfs" >&2
+          exit 1
+        }
+        gridd_dependencies="$("${gridd_loader}" --library-path "${gridd_root}/usr/local/lib:${gridd_root}/usr/local/lib/nvidia/gridd:${gridd_root}/usr/lib:${gridd_root}/lib" --list "${gridd_root}/usr/bin/nvidia-gridd" 2>&1)"
         printf '%s\n' "${gridd_dependencies}"
         if grep -Fq 'not found' <<< "${gridd_dependencies}"; then
           echo "Unresolved shared-library dependency in nvidia-gridd service rootfs" >&2
