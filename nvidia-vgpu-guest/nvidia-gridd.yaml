@@ -1,0 +1,50 @@
+name: nvidia-gridd
+depends:
+  - network:
+      - addresses
+      - connectivity
+      - hostname
+      - etcfiles
+  - configuration: true
+  - path: /dev/nvidiactl
+  - path: /dev/nvidia0
+  - path: /etc/ssl/certs
+container:
+  security:
+    maskedPaths: []
+    readonlyPaths: []
+    writeableRootfs: true
+  entrypoint: /bin/sh
+  args:
+    - /usr/local/bin/nvidia-gridd-wrapper
+  mounts:
+    # NVIDIA vGPU device nodes and control interface.
+    - source: /dev
+      destination: /dev
+      type: bind
+      options:
+        - rshared
+        - rbind
+        - rw
+    # NVIDIA's licensing client inspects the loaded driver through procfs/sysfs.
+    - source: /proc
+      destination: /proc
+      type: bind
+      options:
+        - rbind
+        - ro
+    - source: /sys
+      destination: /sys
+      type: bind
+      options:
+        - rbind
+        - ro
+    # Trust anchors installed in Talos, including a private CA for an internal
+    # NVIDIA License System endpoint.
+    - source: /etc/ssl/certs
+      destination: /etc/ssl/certs
+      type: bind
+      options:
+        - rbind
+        - ro
+restart: always
