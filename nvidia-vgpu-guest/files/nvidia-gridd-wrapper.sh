@@ -37,7 +37,7 @@ rm -f /var/run/nvidia-gridd /var/run/nvidia-gridd.pid
 # in the foreground, this command remains the service's main process. If it
 # forks, monitor the PID file so Talos restarts the service if the daemon exits.
 /usr/local/lib/ld-linux-x86-64.so.2 \
-  --library-path /usr/local/lib:/usr/lib:/lib \
+  --library-path /usr/local/lib:/usr/local/lib/nvidia/gridd:/usr/lib:/lib \
   /usr/bin/nvidia-gridd
 
 pid=
