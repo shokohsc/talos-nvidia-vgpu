@@ -64,3 +64,61 @@ This avoids relying on a display server or a Kubernetes privileged pod to create
 ## Validation status
 
 CI compile and package success does not establish runtime compatibility. Before deployment, validate module vermagic, symbol versions against the exact `Module.symvers`, signature policy, module load, NVRM initialization, udev-created device nodes, vGPU enumeration, and a real workload.
+
+
+## NVIDIA vGPU licensing on Talos
+
+The extension includes a dedicated `nvidia-gridd` Talos extension service. It starts after networking, the NVIDIA device nodes, and its `ExtensionServiceConfig` are available. The service runs in its own container rootfs and receives the host NVIDIA devices, procfs/sysfs, and Talos CA trust bundle.
+
+### NVIDIA License System (DLS/CLS)
+
+For NVIDIA License System, generate a Linux client configuration token (`.tok`) from the license service. The token contains the service-instance information, including the endpoint; do not set the HTTPS FQDN as `ServerAddress` in `gridd.conf`. NVIDIA's Linux client uses `FeatureType=1` for vGPU and reads the token from `/etc/nvidia/ClientConfigToken/`.
+
+Add an `ExtensionServiceConfig` document to the Talos machine configuration. Keep the token out of Git and out of the extension image; inject it from your secret-management workflow:
+
+```yaml
+apiVersion: v1alpha1
+kind: ExtensionServiceConfig
+name: nvidia-gridd
+configFiles:
+  - mountPath: /run/nvidia-client-token.tok
+    content: |
+      <paste the complete client configuration token here>
+```
+
+The service copies the mounted token into its private writable rootfs and sets mode `0744` before starting `nvidia-gridd`. The token is not baked into the OCI image. The HTTPS endpoint's certificate must chain to a CA trusted by Talos; add your private CA to the Talos trusted roots so it is present under `/etc/ssl/certs`.
+
+Apply the multi-document configuration using your normal Talos configuration workflow, for example:
+
+```sh
+talosctl apply-config --nodes <talos-node> --file <complete-machine-config.yaml>
+```
+
+Because this is an `ExtensionServiceConfig` document, retain it alongside the primary machine configuration when applying updates. Verify the service and licensing state:
+
+```sh
+talosctl -n <talos-node> service ext-nvidia-gridd
+talosctl -n <talos-node> logs ext-nvidia-gridd
+chroot /host /usr/bin/nvidia-smi -q | grep -A8 -i 'licensed product'
+```
+
+### Legacy GRID License Server
+
+If you are using the older GRID License Server protocol rather than NVIDIA License System, you can override the daemon configuration instead of supplying an NLS token:
+
+```yaml
+apiVersion: v1alpha1
+kind: ExtensionServiceConfig
+name: nvidia-gridd
+configFiles:
+  - mountPath: /run/gridd.conf
+    content: |
+      ServerAddress=gridlicense.example.internal
+      ServerPort=7070
+      FeatureType=1
+      EnableUI=FALSE
+```
+
+This legacy mode uses the GRID licensing protocol and its configured port; an arbitrary HTTPS URL is not interchangeable with a DLS/CLS endpoint. Confirm the protocol and port exposed by your server before using this mode.
+
+The service's runtime logs and NVIDIA's `nvidia-smi -q` license status are the source of truth. A successful extension build or a running `nvidia-gridd` process alone does not prove that a license was acquired.
