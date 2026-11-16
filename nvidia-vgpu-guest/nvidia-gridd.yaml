@@ -5,7 +5,6 @@ depends:
       - connectivity
       - hostname
       - etcfiles
-  - configuration: true
   - path: /dev/nvidiactl
   - path: /dev/nvidia0
   - path: /etc/ssl/certs
