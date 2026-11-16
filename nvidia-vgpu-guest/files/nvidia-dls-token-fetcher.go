@@ -2,6 +2,8 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"io"
@@ -26,8 +28,19 @@ func main() {
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 
+	roots, err := loadRootCAs()
+	if err != nil {
+		fatal("configure TLS root CAs: %v", err)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.TLSClientConfig = &tls.Config{
+		RootCAs:    roots,
+		MinVersion: tls.VersionTLS12,
+	}
+
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Transport: transport,
+		Timeout:   30 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if req.URL.Scheme != "https" {
 				return fmt.Errorf("refusing redirect to non-HTTPS URL")
@@ -90,6 +103,34 @@ func main() {
 		fatal("install token atomically: %v", err)
 	}
 	fmt.Printf("Retrieved NVIDIA client token from %s\n", parsed.Redacted())
+}
+
+const defaultCABundlePath = "/etc/ssl/certs/ca-certificates.crt"
+
+// loadRootCAs preserves Go's system roots and explicitly appends the Talos
+// trust bundle. This avoids relying on implicit CA discovery inside the
+// isolated extension-service container.
+func loadRootCAs() (*x509.CertPool, error) {
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		// The mounted Talos bundle below is a complete CA bundle on this
+		// platform, so it can also serve as the fallback when Go cannot
+		// discover a system pool inside the service container.
+		roots = x509.NewCertPool()
+	}
+
+	bundlePath := strings.TrimSpace(os.Getenv("NVIDIA_DLS_CA_BUNDLE"))
+	if bundlePath == "" {
+		bundlePath = defaultCABundlePath
+	}
+	caPEM, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return nil, fmt.Errorf("read CA bundle %q: %w", bundlePath, err)
+	}
+	if ok := roots.AppendCertsFromPEM(caPEM); !ok {
+		return nil, fmt.Errorf("CA bundle %q contains no valid PEM certificates", bundlePath)
+	}
+	return roots, nil
 }
 
 func fatal(format string, args ...any) {
