@@ -5,21 +5,17 @@ token_dir=/etc/nvidia/ClientConfigToken
 token_target="${token_dir}/client_configuration_token.tok"
 dls_url="${NVIDIA_DLS_URL:-https://dls.home.arpa}"
 
-# NVIDIA License System client tokens are fetched at runtime. The endpoint is
-# HTTPS-only and the fetcher uses the system CA bundle; certificate validation
-# is never disabled. A Talos trusted root can therefore authorize a private CA.
-mkdir -p "${token_dir}"
-/usr/local/bin/nvidia-dls-token-fetcher \
-  --url "${dls_url}" \
-  --output "${token_target}"
-
-chmod 0744 "${token_target}"
-
-# Optional override for installations using a legacy GRID license server.
-# DLS/CLS uses the downloaded client token and the packaged FeatureType=1 config.
+# A legacy GRID configuration bypasses FastAPI-DLS entirely. Otherwise fetch
+# a fresh NVIDIA License System token before starting the licensing daemon.
 if [ -s /run/gridd.conf ]; then
   cp /run/gridd.conf /etc/nvidia/gridd.conf
   chmod 0644 /etc/nvidia/gridd.conf
+else
+  mkdir -p "${token_dir}"
+  /usr/local/bin/nvidia-dls-token-fetcher \
+    --url "${dls_url}" \
+    --output "${token_target}"
+  chmod 0744 "${token_target}"
 fi
 
 if [ ! -s /etc/nvidia/gridd.conf ]; then
