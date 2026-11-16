@@ -80,7 +80,7 @@ GET https://dls.home.arpa/-/client-token
 
 This is FastAPI-DLS's documented client-token endpoint. The response is written directly to `/etc/nvidia/ClientConfigToken/client_configuration_token.tok` in the service's private writable rootfs, with restrictive permissions, before `nvidia-gridd` starts.
 
-The endpoint is configurable through the non-secret `NVIDIA_DLS_URL` environment variable in the `ExtensionServiceConfig` document:
+The endpoint is configurable through the non-secret `NVIDIA_DLS_URL` environment variable in the `ExtensionServiceConfig` document. The fetcher also explicitly loads the mounted Talos CA bundle into its Go TLS root pool. The bundle path defaults to `/etc/ssl/certs/ca-certificates.crt` and can be overridden with `NVIDIA_DLS_CA_BUNDLE`:
 
 ```yaml
 apiVersion: v1alpha1
@@ -88,6 +88,7 @@ kind: ExtensionServiceConfig
 name: nvidia-gridd
 environment:
   - NVIDIA_DLS_URL=https://dls.home.arpa
+  - NVIDIA_DLS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 ```
 
 You can omit this document entirely to use the default. No token is placed in this configuration.
