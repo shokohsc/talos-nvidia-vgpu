@@ -411,6 +411,14 @@ steps:
         rm -rf "${gridd_stage}"
         mkdir -p "${gridd_stage}/usr/bin" "${gridd_stage}/usr/local/bin" "${gridd_stage}/usr/local/lib" "${gridd_stage}/bin" "${gridd_stage}/lib" "${gridd_stage}/etc/nvidia" "${gridd_stage}/var/run" "${gridd_stage}/run"
         cp -a /rootfs/usr/local/lib "${gridd_stage}/usr/local/"
+        # The glibc dependency is mounted into the package build stage at
+        # /usr/local, not into /rootfs. The licensing daemon runs in its own
+        # service rootfs, so bundle the same loader and glibc runtime there.
+        test -x /usr/local/lib/ld-linux-x86-64.so.2 || {
+          echo "Missing glibc loader in package build stage" >&2
+          exit 1
+        }
+        cp -a /usr/local/lib/. "${gridd_stage}/usr/local/lib/"
         install -m 0755 /rootfs/usr/bin/nvidia-gridd "${gridd_stage}/usr/bin/nvidia-gridd"
         test -x /bin/busybox || {
           echo "The Talos tools image must provide /bin/busybox for the nvidia-gridd service wrapper" >&2
