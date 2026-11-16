@@ -68,57 +68,38 @@ CI compile and package success does not establish runtime compatibility. Before 
 
 ## NVIDIA vGPU licensing on Talos
 
-The extension includes a dedicated `nvidia-gridd` Talos extension service. It starts after networking, the NVIDIA device nodes, and its `ExtensionServiceConfig` are available. The service runs in its own container rootfs and receives the host NVIDIA devices, procfs/sysfs, and Talos CA trust bundle.
+The extension includes a dedicated `nvidia-gridd` Talos extension service. For NVIDIA License System (FastAPI-DLS), it retrieves a fresh Linux client configuration token at service startup; the token is never stored in Talos machine configuration, Git, build artifacts, or the OCI image.
 
-### NVIDIA License System (DLS/CLS)
+### FastAPI-DLS endpoint
 
-For NVIDIA License System, generate a Linux client configuration token (`.tok`) from the license service. The token contains the service-instance information, including the endpoint; do not set the HTTPS FQDN as `ServerAddress` in `gridd.conf`. NVIDIA's Linux client uses `FeatureType=1` for vGPU and reads the token from `/etc/nvidia/ClientConfigToken/`.
+The default endpoint is `https://dls.home.arpa`. The extension requests:
 
-Add an `ExtensionServiceConfig` document to the Talos machine configuration. Keep the token out of Git and out of the extension image; inject it from your secret-management workflow:
+```text
+GET https://dls.home.arpa/-/client-token
+```
+
+This is FastAPI-DLS's documented client-token endpoint. The response is written directly to `/etc/nvidia/ClientConfigToken/client_configuration_token.tok` in the service's private writable rootfs, with restrictive permissions, before `nvidia-gridd` starts.
+
+The endpoint is configurable through the non-secret `NVIDIA_DLS_URL` environment variable in the `ExtensionServiceConfig` document:
 
 ```yaml
 apiVersion: v1alpha1
 kind: ExtensionServiceConfig
 name: nvidia-gridd
-configFiles:
-  - mountPath: /run/nvidia-client-token.tok
-    content: |
-      <paste the complete client configuration token here>
+environment:
+  - NVIDIA_DLS_URL=https://dls.home.arpa
 ```
 
-The service copies the mounted token into its private writable rootfs and sets mode `0744` before starting `nvidia-gridd`. The token is not baked into the OCI image. The HTTPS endpoint's certificate must chain to a CA trusted by Talos; add your private CA to the Talos trusted roots so it is present under `/etc/ssl/certs`.
+You can omit this document entirely to use the default. No token is placed in this configuration.
 
-Apply the multi-document configuration using your normal Talos configuration workflow, for example:
+### Private CA trust
 
-```sh
-talosctl apply-config --nodes <talos-node> --file <complete-machine-config.yaml>
-```
+The token fetcher uses HTTPS with normal certificate verification. It does not disable TLS verification or accept insecure redirects. The service mounts Talos' `/etc/ssl/certs` trust store read-only, so add your private CA to Talos' trusted roots. The CA certificate is public trust material, not a client token; do not put a private CA key in Talos or this repository.
 
-Because this is an `ExtensionServiceConfig` document, retain it alongside the primary machine configuration when applying updates. Verify the service and licensing state:
-
-```sh
-talosctl -n <talos-node> service ext-nvidia-gridd
-talosctl -n <talos-node> logs ext-nvidia-gridd
-chroot /host /usr/bin/nvidia-smi -q | grep -A8 -i 'licensed product'
-```
+The fetcher retrieves the token at every service start and fails closed if DNS, TLS validation, the endpoint, or the response fails. Talos will restart the service according to its restart policy. FastAPI-DLS client tokens are long-lived; NVIDIA's licensing client handles lease renewal after startup.
 
 ### Legacy GRID License Server
 
-If you are using the older GRID License Server protocol rather than NVIDIA License System, you can override the daemon configuration instead of supplying an NLS token:
-
-```yaml
-apiVersion: v1alpha1
-kind: ExtensionServiceConfig
-name: nvidia-gridd
-configFiles:
-  - mountPath: /run/gridd.conf
-    content: |
-      ServerAddress=gridlicense.example.internal
-      ServerPort=7070
-      FeatureType=1
-      EnableUI=FALSE
-```
-
-This legacy mode uses the GRID licensing protocol and its configured port; an arbitrary HTTPS URL is not interchangeable with a DLS/CLS endpoint. Confirm the protocol and port exposed by your server before using this mode.
+The optional legacy GRID licensing mode remains available through a `/run/gridd.conf` override. It is separate from FastAPI-DLS/NVIDIA License System and should only be used when connecting to a legacy GRID License Server.
 
 The service's runtime logs and NVIDIA's `nvidia-smi -q` license status are the source of truth. A successful extension build or a running `nvidia-gridd` process alone does not prove that a license was acquired.
