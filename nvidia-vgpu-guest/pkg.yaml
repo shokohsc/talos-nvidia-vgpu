@@ -419,14 +419,18 @@ steps:
           exit 1
         }
         cp -a /usr/local/lib/. "${gridd_stage}/usr/local/lib/"
-        # The glibc package also ships libc.so as a GNU ld linker script for
-        # link-time use. It is not an ELF shared object and must not be present
-        # in the runtime loader search path; glibc applications use libc.so.6.
-        rm -f "${gridd_stage}/usr/local/lib/libc.so"
+        # The GRID 535 nvidia-gridd executable requests the dependency name
+        # "libc.so" at runtime, while glibc normally exposes its runtime ABI as
+        # libc.so.6. The glibc package's libc.so is a link-time linker script,
+        # which the ELF loader cannot load. Replace it in this isolated service
+        # rootfs with a runtime alias to the actual shared object.
         test -s "${gridd_stage}/usr/local/lib/libc.so.6" || {
           echo "Missing glibc runtime libc.so.6 in nvidia-gridd service rootfs" >&2
           exit 1
         }
+        ln -sfn libc.so.6 "${gridd_stage}/usr/local/lib/libc.so"
+        test -L "${gridd_stage}/usr/local/lib/libc.so"
+        test "$(readlink "${gridd_stage}/usr/local/lib/libc.so")" = "libc.so.6"
         install -m 0755 /rootfs/usr/bin/nvidia-gridd "${gridd_stage}/usr/bin/nvidia-gridd"
         # nvidia-gridd is only executed inside the isolated extension-service
         # rootfs. Do not leave a second copy in the host extension rootfs:
