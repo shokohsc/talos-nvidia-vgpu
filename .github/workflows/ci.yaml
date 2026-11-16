@@ -46,7 +46,8 @@ jobs:
           test -s nvidia-vgpu-guest/files/nvidia.conf
           test -s nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
           test -s nvidia-vgpu-guest/nvidia-gridd.yaml
-          grep -q 'configuration: true' nvidia-vgpu-guest/nvidia-gridd.yaml
+          grep -q 'network: true' nvidia-vgpu-guest/nvidia-gridd.yaml
+          ! grep -q 'configuration: true' nvidia-vgpu-guest/nvidia-gridd.yaml
           grep -q 'nvidia-gridd' nvidia-vgpu-guest/pkg.yaml
           test -s Dockerfile.kernel-build
           test -x scripts/validate-artifacts.sh
