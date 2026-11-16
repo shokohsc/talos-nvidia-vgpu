@@ -32,7 +32,14 @@ if [ ! -s /etc/nvidia/gridd.conf ]; then
 fi
 
 # /var/run is pre-created in the service rootfs at image build time.
-"${busybox}" rm -f /var/run/nvidia-gridd /var/run/nvidia-gridd.pid
+# NVIDIA uses /var/run/nvidia-gridd as a directory for runtime state.
+# Never unlink it as though it were a PID file; remove only stale PID files.
+if [ -f /var/run/nvidia-gridd.pid ]; then
+  "${busybox}" rm -f /var/run/nvidia-gridd.pid
+fi
+if [ -f /var/run/nvidia-gridd/nvidia-gridd.pid ]; then
+  "${busybox}" rm -f /var/run/nvidia-gridd/nvidia-gridd.pid
+fi
 
 # nvidia-gridd daemonizes on the standard Linux client. If this build keeps it
 # in the foreground, this command remains the service's main process. If it
@@ -45,7 +52,7 @@ pid=
 attempt=0
 while [ "${attempt}" -lt 30 ]; do
   for pidfile in /var/run/nvidia-gridd /var/run/nvidia-gridd.pid /var/run/nvidia-gridd/nvidia-gridd.pid; do
-    if [ -s "${pidfile}" ]; then
+    if [ -f "${pidfile}" ] && [ -s "${pidfile}" ]; then
       pid="$("${busybox}" cat "${pidfile}")"
       break 2
     fi
