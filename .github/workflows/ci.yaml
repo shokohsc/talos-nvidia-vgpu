@@ -25,7 +25,7 @@ jobs:
           for path in (pathlib.Path("Pkgfile"), pathlib.Path("nvidia-vgpu-guest/pkg.yaml"), pathlib.Path("base/pkg.yaml")):
               text = path.read_text()
               if path.name == "Pkgfile":
-                  text = "\n".join(text.splitlines()[1:])
+                  text = "\\n".join(text.splitlines()[1:])
               yaml.safe_load(text)
 
           manifest = pathlib.Path("nvidia-vgpu-guest/manifest.yaml.tmpl").read_text()
@@ -53,4 +53,6 @@ jobs:
           test -x scripts/validate-artifacts.sh
           test -s scripts/extract-driver.sh
           grep -q 'BUILD_ARG_KERNEL_IMAGE' nvidia-vgpu-guest/pkg.yaml
-          grep -q 'Module.symvers' nvidia-vgpu-guest/pkg.yaml
+          grep -q '/src/Module.symvers' nvidia-vgpu-guest/pkg.yaml
+          grep -q 'install -m 0755 /bin/busybox' nvidia-vgpu-guest/pkg.yaml
+          grep -q '/bin/busybox' nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
