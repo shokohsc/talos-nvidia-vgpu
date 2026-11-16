@@ -89,13 +89,18 @@ name: nvidia-gridd
 environment:
   - NVIDIA_DLS_URL=https://dls.home.arpa
   - NVIDIA_DLS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+  - NVIDIA_DLS_INSECURE_SKIP_VERIFY=true # optional; disables certificate verification
 ```
 
 You can omit this document entirely to use the default. No token is placed in this configuration.
 
+### TLS verification bypass (opt-in)
+
+By default, the fetcher verifies the DLS server certificate using the Talos trust bundle. To explicitly bypass certificate-chain and hostname verification, set `NVIDIA_DLS_INSECURE_SKIP_VERIFY=true` in the `ExtensionServiceConfig` environment. HTTPS encryption remains enabled and redirects to non-HTTPS URLs are still rejected, but a man-in-the-middle can impersonate the DLS server and supply a malicious token. Use only on a trusted network and remove the setting once CA trust is fixed. The bypass is disabled by default.
+
 ### Private CA trust
 
-The token fetcher uses HTTPS with normal certificate verification. It does not disable TLS verification or accept insecure redirects. The service mounts Talos' `/etc/ssl/certs` trust store read-only, so add your private CA to Talos' trusted roots. The CA certificate is public trust material, not a client token; do not put a private CA key in Talos or this repository.
+Without the opt-in bypass, the token fetcher uses HTTPS with normal certificate verification. The service mounts Talos' `/etc/ssl/certs` trust store read-only, so add your private CA to Talos' trusted roots. The CA certificate is public trust material, not a client token; do not put a private CA key in Talos or this repository.
 
 The fetcher retrieves the token at every service start and fails closed if DNS, TLS validation, the endpoint, or the response fails. Talos will restart the service according to its restart policy. FastAPI-DLS client tokens are long-lived; NVIDIA's licensing client handles lease renewal after startup.
 
