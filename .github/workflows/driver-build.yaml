@@ -9,6 +9,7 @@ on:
       - ".dockerignore"
       - "base/**"
       - "Dockerfile.kernel-build"
+      - "Dockerfile.kernel-validate"
       - "Dockerfile.extensions-validator"
       - "nvidia-vgpu-guest/**"
       - "scripts/extract-driver.sh"
@@ -24,7 +25,6 @@ jobs:
     timeout-minutes: 360
     env:
       PKGS_REF: 9b044c593c71b0ea6deb9985b7907e008b91220c
-      KERNEL_CACHE_KEY: talos-kernel-linux-amd64-v1.13.10-9b044c593c71b0ea6deb9985b7907e008b91220c
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -98,43 +98,52 @@ jobs:
           echo "Disk usage after cleanup:"
           df -h
           df -i
-      - name: Restore Talos kernel build cache
-        id: kernel-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ${{ runner.temp }}/kernel-build
-          key: ${{ env.KERNEL_CACHE_KEY }}
-      - name: Build exact Talos kernel tree
-        if: steps.kernel-cache.outputs.cache-hit != 'true'
+      - name: Check for immutable Talos kernel build image
+        id: kernel-image
+        run: |
+          KERNEL_IMAGE="ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:talos-v1.13.10-${PKGS_REF}"
+          echo "KERNEL_IMAGE=$KERNEL_IMAGE" >> "$GITHUB_ENV"
+          if docker buildx imagetools inspect "$KERNEL_IMAGE" >/dev/null 2>&1; then
+            echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+            echo "Reusing immutable kernel image: $KERNEL_IMAGE"
+          else
+            echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+            echo "Kernel image not found; it will be built and pushed: $KERNEL_IMAGE"
+          fi
+      - name: Build and publish exact Talos kernel tree
+        if: steps.kernel-image.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/siderolabs/pkgs.git "$RUNNER_TEMP/pkgs"
           git -C "$RUNNER_TEMP/pkgs" checkout "$PKGS_REF"
-          make -C "$RUNNER_TEMP/pkgs" local-kernel-build \
+          # BuildKit pushes the scratch kernel-build image directly to GHCR.
+          # Do not use the local exporter: it copies the complete source and
+          # toolchain tree onto the ephemeral runner before the next step.
+          make -C "$RUNNER_TEMP/pkgs" target-kernel-build \
             PLATFORM=linux/amd64 \
-            DEST="$RUNNER_TEMP/kernel-build"
-      - name: Validate Talos kernel build tree
+            TARGET_ARGS="--tag=$KERNEL_IMAGE --push"
+      - name: Validate Talos kernel build image
         run: |
-          test -s "$RUNNER_TEMP/kernel-build/src/Module.symvers"
-          test -s "$RUNNER_TEMP/kernel-build/src/include/config/kernel.release"
-          cat "$RUNNER_TEMP/kernel-build/src/include/config/kernel.release" \
-            | tee "$RUNNER_TEMP/kernel-release.txt"
-      - name: Save Talos kernel build cache
-        if: steps.kernel-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ${{ runner.temp }}/kernel-build
-          key: ${{ env.KERNEL_CACHE_KEY }}
-      - name: Package kernel build tree as a local build image
-        run: |
-          cd "$RUNNER_TEMP"
-          export KERNEL_IMAGE="ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:v1.13.10-${PKGS_REF}"
-          echo "KERNEL_IMAGE=$KERNEL_IMAGE" >> "$GITHUB_ENV"
+          cat > "$RUNNER_TEMP/Dockerfile.kernel-validate" <<'EOF'
+          ARG KERNEL_IMAGE
+          FROM ${KERNEL_IMAGE} AS kernel
+          FROM ghcr.io/siderolabs/tools:v1.13.0-12-gc70be08 AS validate
+          COPY --from=kernel /src/Module.symvers /tmp/Module.symvers
+          COPY --from=kernel /src/include/config/kernel.release /tmp/kernel.release
+          RUN test -s /tmp/Module.symvers \
+              && test -s /tmp/kernel.release \
+              && cat /tmp/kernel.release
+          FROM scratch AS metadata
+          COPY --from=validate /tmp/kernel.release /kernel-release.txt
+          EOF
           docker buildx build \
             --platform linux/amd64 \
-            --file "$GITHUB_WORKSPACE/Dockerfile.kernel-build" \
-            --tag "$KERNEL_IMAGE" \
-            --push \
-            "$RUNNER_TEMP/kernel-build"
+            --file "$RUNNER_TEMP/Dockerfile.kernel-validate" \
+            --build-arg KERNEL_IMAGE="$KERNEL_IMAGE" \
+            --target metadata \
+            --output "type=local,dest=$RUNNER_TEMP/kernel-metadata" \
+            "$RUNNER_TEMP"
+          cat "$RUNNER_TEMP/kernel-metadata/kernel-release.txt" \
+            | tee "$RUNNER_TEMP/kernel-release.txt"
       - name: Build Talos system extension
         run: |
           docker buildx build \
@@ -217,7 +226,7 @@ jobs:
             echo "## NVIDIA vGPU extension build"
             echo "- GRID driver: 535.161.07"
             echo "- Talos: v1.13.10 amd64"
-            echo "- Kernel cache: ${{ steps.kernel-cache.outputs.cache-hit || 'miss' }}"
+            echo "- Kernel image: $KERNEL_IMAGE"
             echo "- Kernel: $(cat "$RUNNER_TEMP/kernel-release.txt" 2>/dev/null || echo unavailable)"
             echo "- OCI output: nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar"
             echo "- Installer tar artifact: metal-installer-v1.13.10"
