@@ -18,7 +18,7 @@ The workflow consumes `docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid` an
 
 1. Extracts the exact `NVIDIA-Linux-x86_64-535.161.07-grid.run` installer from the image.
 2. Checks and extracts the installer on the ephemeral runner. The extracted proprietary payload is ignored by Git and is not uploaded separately.
-3. Builds the exact Talos 1.13.10 kernel tree from pinned `siderolabs/pkgs` commit `9b044c593c71b0ea6deb9985b7907e008b91220c`, retaining `Module.symvers` and `/toolchain`.
+3. Builds the exact Talos 1.13.10 kernel tree from pinned `siderolabs/pkgs` commit `9b044c593c71b0ea6deb9985b7907e008b91220c` and pushes the scratch build image directly to GHCR, retaining `Module.symvers` and `/toolchain` without exporting the full tree to the ephemeral runner. The immutable image tag is reused on subsequent runs.
 4. Builds the proprietary NVIDIA guest kernel modules against that kernel tree using the matching LLVM tools.
 5. Installs matching NVIDIA userspace, including `nvidia-modprobe`, into the extension rootfs. A Talos udev rule invokes the helper when the NVIDIA character device is registered, creating the `/dev/nvidia*` and UVM device nodes without shipping special files in the extension image.
 6. Validates the expected modules, NVML, `nvidia-smi`, `nvidia-modprobe`, the udev rule, and the Talos extension manifest.
@@ -45,7 +45,7 @@ make kernel-build
 make build
 ```
 
-Override `TALOS_VERSION`, `NVIDIA_DRIVER_VERSION`, `KERNEL_IMAGE`, or `EXTENSION_IMAGE` when using a different pinned build. The kernel image is pushed to GHCR so the bldr build can consume the exact generated kernel tree; the final extension is exported locally as an OCI archive.
+Override `TALOS_VERSION`, `NVIDIA_DRIVER_VERSION`, `KERNEL_IMAGE`, or `EXTENSION_IMAGE` when using a different pinned build. The kernel image is built and pushed directly by BuildKit to GHCR so the bldr build can consume the exact generated kernel tree. Only the small `kernel.release` metadata file is exported locally for validation; the final extension is exported as an OCI archive.
 
 ## Kernel build pins
 
