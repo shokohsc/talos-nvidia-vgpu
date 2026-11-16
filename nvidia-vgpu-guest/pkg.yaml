@@ -428,6 +428,15 @@ steps:
           exit 1
         }
         install -m 0755 /rootfs/usr/bin/nvidia-gridd "${gridd_stage}/usr/bin/nvidia-gridd"
+        # nvidia-gridd is only executed inside the isolated extension-service
+        # rootfs. Do not leave a second copy in the host extension rootfs:
+        # Talos' extension allowlist rejects /usr/bin/nvidia-gridd, while the
+        # service container has its own /usr/bin and runtime dependencies.
+        rm -f /rootfs/usr/bin/nvidia-gridd
+        test ! -e /rootfs/usr/bin/nvidia-gridd || {
+          echo "nvidia-gridd must only be installed in its extension-service rootfs" >&2
+          exit 1
+        }
         test -x /bin/busybox || {
           echo "The Talos tools image must provide /bin/busybox for the nvidia-gridd service wrapper" >&2
           exit 1
@@ -498,7 +507,8 @@ steps:
           exit 1
         }
         test -x /rootfs/usr/bin/nvidia-modprobe
-        test -x /rootfs/usr/bin/nvidia-gridd
+        test ! -e /rootfs/usr/bin/nvidia-gridd
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
         test -s /rootfs/usr/local/etc/containers/nvidia-gridd.yaml
         test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-gridd-wrapper
         test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
