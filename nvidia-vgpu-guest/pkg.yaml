@@ -409,7 +409,7 @@ steps:
         gridd_stage="/tmp/nvidia-gridd-rootfs"
         gridd_root="/rootfs/usr/local/lib/containers/nvidia-gridd"
         rm -rf "${gridd_stage}"
-        mkdir -p "${gridd_stage}/usr/bin" "${gridd_stage}/usr/local" "${gridd_stage}/bin" "${gridd_stage}/lib" "${gridd_stage}/etc/nvidia" "${gridd_stage}/var/run" "${gridd_stage}/run"
+        mkdir -p "${gridd_stage}/usr/bin" "${gridd_stage}/usr/local/bin" "${gridd_stage}/usr/local/lib" "${gridd_stage}/bin" "${gridd_stage}/lib" "${gridd_stage}/etc/nvidia" "${gridd_stage}/var/run" "${gridd_stage}/run"
         cp -a /rootfs/usr/local/lib "${gridd_stage}/usr/local/"
         install -m 0755 /rootfs/usr/bin/nvidia-gridd "${gridd_stage}/usr/bin/nvidia-gridd"
         test -x /bin/busybox || {
