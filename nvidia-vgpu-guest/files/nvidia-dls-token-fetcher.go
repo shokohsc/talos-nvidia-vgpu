@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+const (
+	defaultCABundlePath = "/etc/ssl/certs/ca-certificates.crt"
+	insecureSkipVerifyEnv = "NVIDIA_DLS_INSECURE_SKIP_VERIFY"
+)
+
 func main() {
 	baseURL := flag.String("url", "https://dls.home.arpa", "FastAPI-DLS HTTPS base URL")
 	output := flag.String("output", "/etc/nvidia/ClientConfigToken/client_configuration_token.tok", "token output path")
@@ -28,14 +33,22 @@ func main() {
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 
-	roots, err := loadRootCAs()
-	if err != nil {
-		fatal("configure TLS root CAs: %v", err)
+	insecureSkipVerify := dlsInsecureSkipVerifyEnabled()
+	var roots *x509.CertPool
+	if !insecureSkipVerify {
+		roots, err = loadRootCAs()
+		if err != nil {
+			fatal("configure TLS root CAs: %v", err)
+		}
+	} else {
+		fmt.Fprintln(os.Stderr, "WARNING: NVIDIA_DLS_INSECURE_SKIP_VERIFY=true; DLS server certificates are NOT verified")
 	}
+
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.TLSClientConfig = &tls.Config{
-		RootCAs:    roots,
-		MinVersion: tls.VersionTLS12,
+		RootCAs:            roots,
+		InsecureSkipVerify: insecureSkipVerify, // #nosec G402 -- explicit operator opt-in; disabled by default.
+		MinVersion:         tls.VersionTLS12,
 	}
 
 	client := &http.Client{
@@ -105,7 +118,11 @@ func main() {
 	fmt.Printf("Retrieved NVIDIA client token from %s\n", parsed.Redacted())
 }
 
-const defaultCABundlePath = "/etc/ssl/certs/ca-certificates.crt"
+// dlsInsecureSkipVerifyEnabled enables the explicitly requested TLS verification
+// bypass only when the operator sets NVIDIA_DLS_INSECURE_SKIP_VERIFY=true.
+func dlsInsecureSkipVerifyEnabled() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv(insecureSkipVerifyEnv)), "true")
+}
 
 // loadRootCAs preserves Go's system roots and explicitly appends the Talos
 // trust bundle. This avoids relying on implicit CA discovery inside the
