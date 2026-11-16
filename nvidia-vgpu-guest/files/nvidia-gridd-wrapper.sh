@@ -11,23 +11,42 @@ if [ ! -x "${busybox}" ]; then
 fi
 
 token_target=/etc/nvidia/ClientConfigToken/client_configuration_token.tok
+gridd_config=/etc/nvidia/gridd.conf
 dls_url="${NVIDIA_DLS_URL:-https://dls.home.arpa}"
+
+# Keep the licensing configuration inside the service's private rootfs.
+# The package normally ships this file, but create a safe vGPU default if it
+# is absent (for example, after a rootfs/package layout change). A runtime
+# /run/gridd.conf override is reserved for legacy GRID License Server setups.
+"${busybox}" mkdir -p /etc/nvidia
+if [ -s /run/gridd.conf ]; then
+  "${busybox}" cp /run/gridd.conf "${gridd_config}"
+  "${busybox}" chmod 0644 "${gridd_config}"
+elif [ ! -s "${gridd_config}" ]; then
+  printf '%s\n' \
+    '# NVIDIA License System client configuration for a Talos vGPU guest.' \
+    'FeatureType=1' \
+    'EnableUI=FALSE' > "${gridd_config}"
+  "${busybox}" chmod 0644 "${gridd_config}"
+  echo "Created default NVIDIA vGPU licensing configuration"
+fi
+
+if [ ! -s "${gridd_config}" ]; then
+  echo "Missing or empty ${gridd_config}" >&2
+  exit 1
+fi
 
 # A legacy GRID configuration bypasses FastAPI-DLS entirely. Otherwise fetch
 # a fresh NVIDIA License System token before starting the licensing daemon.
-# The Go fetcher creates the token directory itself using os.MkdirAll.
-if [ -s /run/gridd.conf ]; then
-  "${busybox}" cp /run/gridd.conf /etc/nvidia/gridd.conf
-  "${busybox}" chmod 0644 /etc/nvidia/gridd.conf
-else
+if [ ! -s /run/gridd.conf ]; then
   /usr/local/bin/nvidia-dls-token-fetcher \
     --url "${dls_url}" \
     --output "${token_target}"
   "${busybox}" chmod 0744 "${token_target}"
 fi
 
-if [ ! -s /etc/nvidia/gridd.conf ]; then
-  echo "Missing /etc/nvidia/gridd.conf" >&2
+if [ ! -s "${token_target}" ] && [ ! -s /run/gridd.conf ]; then
+  echo "Missing or empty NVIDIA client token at ${token_target}" >&2
   exit 1
 fi
 
