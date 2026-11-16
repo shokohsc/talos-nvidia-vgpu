@@ -448,8 +448,18 @@ steps:
           echo "Missing NVIDIA licensing library libFlxCore64.so in service rootfs" >&2
           exit 1
         }
+        # Do not let set -e hide the dynamic loader's diagnostic when --list
+        # fails. Preserve both its output and status so CI reports the actual
+        # missing executable/library instead of only exit code 127.
+        set +e
         gridd_dependencies="$("${gridd_loader}" --library-path "${gridd_root}/usr/local/lib:${gridd_root}/usr/local/lib/nvidia/gridd:${gridd_root}/usr/lib:${gridd_root}/lib" --list "${gridd_root}/usr/bin/nvidia-gridd" 2>&1)"
-        printf '%s\n' "${gridd_dependencies}"
+        gridd_status=$?
+        set -e
+        printf '%s\\n' "${gridd_dependencies}"
+        if [[ "${gridd_status}" -ne 0 ]]; then
+          echo "nvidia-gridd dependency inspection failed with status ${gridd_status}" >&2
+          exit "${gridd_status}"
+        fi
         if grep -Fq 'not found' <<< "${gridd_dependencies}"; then
           echo "Unresolved shared-library dependency in nvidia-gridd service rootfs" >&2
           exit 1
