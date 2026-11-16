@@ -456,6 +456,9 @@ steps:
           echo "Go compiler is required to build the DLS token fetcher" >&2
           exit 1
         }
+        # Exercise the explicit system-plus-Talos CA loading path before
+        # compiling the static fetcher shipped in the service rootfs.
+        go test /pkg/files/nvidia-dls-token-fetcher.go /pkg/files/nvidia-dls-token-fetcher_test.go
         CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
           -o "${gridd_stage}/usr/local/bin/nvidia-dls-token-fetcher" \
           /pkg/files/nvidia-dls-token-fetcher.go
