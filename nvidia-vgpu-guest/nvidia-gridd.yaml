@@ -46,4 +46,12 @@ container:
       options:
         - rbind
         - ro
+    # Expose Talos' log directory so nvidia-gridd licensing events are visible
+    # outside the isolated extension root filesystem.
+    - source: /var/log
+      destination: /var/log
+      type: bind
+      options:
+        - rbind
+        - rw
 restart: always
