@@ -13,6 +13,22 @@ import (
 	"time"
 )
 
+func TestDLSInsecureSkipVerifyDisabledByDefault(t *testing.T) {
+	t.Setenv(insecureSkipVerifyEnv, "")
+	if dlsInsecureSkipVerifyEnabled() {
+		t.Fatal("TLS verification bypass must be disabled by default")
+	}
+}
+
+func TestDLSInsecureSkipVerifyRequiresTrue(t *testing.T) {
+	for _, value := range []string{"false", "1", "yes", "TRUE "} {
+		t.Setenv(insecureSkipVerifyEnv, value)
+		if got := dlsInsecureSkipVerifyEnabled(); got != (value == "TRUE ") {
+			t.Fatalf("unexpected result for %q: got %v", value, got)
+		}
+	}
+}
+
 func TestLoadRootCAsAppendsConfiguredBundle(t *testing.T) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
