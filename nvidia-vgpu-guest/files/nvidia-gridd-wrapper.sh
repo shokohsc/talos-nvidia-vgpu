@@ -1,21 +1,29 @@
 #!/bin/sh
 set -eu
 
-token_dir=/etc/nvidia/ClientConfigToken
-token_target="${token_dir}/client_configuration_token.tok"
+# The extension-service rootfs is intentionally minimal. It contains the
+# BusyBox binary, but not the usual applet symlinks or GNU coreutils. Invoke
+# BusyBox explicitly rather than relying on PATH lookup for mkdir/cp/chmod/etc.
+busybox=/bin/busybox
+if [ ! -x "${busybox}" ]; then
+  echo "Missing BusyBox runtime at ${busybox}" >&2
+  exit 127
+fi
+
+token_target=/etc/nvidia/ClientConfigToken/client_configuration_token.tok
 dls_url="${NVIDIA_DLS_URL:-https://dls.home.arpa}"
 
 # A legacy GRID configuration bypasses FastAPI-DLS entirely. Otherwise fetch
 # a fresh NVIDIA License System token before starting the licensing daemon.
+# The Go fetcher creates the token directory itself using os.MkdirAll.
 if [ -s /run/gridd.conf ]; then
-  cp /run/gridd.conf /etc/nvidia/gridd.conf
-  chmod 0644 /etc/nvidia/gridd.conf
+  "${busybox}" cp /run/gridd.conf /etc/nvidia/gridd.conf
+  "${busybox}" chmod 0644 /etc/nvidia/gridd.conf
 else
-  mkdir -p "${token_dir}"
   /usr/local/bin/nvidia-dls-token-fetcher \
     --url "${dls_url}" \
     --output "${token_target}"
-  chmod 0744 "${token_target}"
+  "${busybox}" chmod 0744 "${token_target}"
 fi
 
 if [ ! -s /etc/nvidia/gridd.conf ]; then
@@ -23,8 +31,8 @@ if [ ! -s /etc/nvidia/gridd.conf ]; then
   exit 1
 fi
 
-mkdir -p /var/run
-rm -f /var/run/nvidia-gridd /var/run/nvidia-gridd.pid
+# /var/run is pre-created in the service rootfs at image build time.
+"${busybox}" rm -f /var/run/nvidia-gridd /var/run/nvidia-gridd.pid
 
 # nvidia-gridd daemonizes on the standard Linux client. If this build keeps it
 # in the foreground, this command remains the service's main process. If it
@@ -38,12 +46,12 @@ attempt=0
 while [ "${attempt}" -lt 30 ]; do
   for pidfile in /var/run/nvidia-gridd /var/run/nvidia-gridd.pid /var/run/nvidia-gridd/nvidia-gridd.pid; do
     if [ -s "${pidfile}" ]; then
-      pid="$(cat "${pidfile}")"
+      pid="$("${busybox}" cat "${pidfile}")"
       break 2
     fi
   done
   attempt=$((attempt + 1))
-  sleep 1
+  "${busybox}" sleep 1
 done
 
 case "${pid}" in
@@ -53,8 +61,8 @@ case "${pid}" in
     ;;
 esac
 
-while kill -0 "${pid}" 2>/dev/null; do
-  sleep 5
+while "${busybox}" kill -0 "${pid}" 2>/dev/null; do
+  "${busybox}" sleep 5
 done
 
 echo "nvidia-gridd process ${pid} exited" >&2
