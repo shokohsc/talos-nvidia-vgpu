@@ -450,6 +450,15 @@ steps:
         FeatureType=1
         EnableUI=FALSE
         EOF
+        # Build a small static HTTPS client so token retrieval uses Go's
+        # system trust store and does not depend on BusyBox wget TLS behavior.
+        command -v go >/dev/null 2>&1 || {
+          echo "Go compiler is required to build the DLS token fetcher" >&2
+          exit 1
+        }
+        CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+          -o "${gridd_stage}/usr/local/bin/nvidia-dls-token-fetcher" \
+          /pkg/files/nvidia-dls-token-fetcher.go
         install -m 0755 /pkg/files/nvidia-gridd-wrapper.sh "${gridd_stage}/usr/local/bin/nvidia-gridd-wrapper"
         mkdir -p "${gridd_root}"
         cp -a "${gridd_stage}/." "${gridd_root}/"
@@ -511,6 +520,7 @@ steps:
         test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
         test -s /rootfs/usr/local/etc/containers/nvidia-gridd.yaml
         test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-gridd-wrapper
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-dls-token-fetcher
         test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
         test -s /rootfs/usr/local/lib/containers/nvidia-gridd/etc/nvidia/gridd.conf
         test -s /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
