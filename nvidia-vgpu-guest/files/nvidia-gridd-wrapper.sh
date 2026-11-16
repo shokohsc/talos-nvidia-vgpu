@@ -1,21 +1,22 @@
 #!/bin/sh
 set -eu
 
-token_source=/run/nvidia-client-token.tok
 token_dir=/etc/nvidia/ClientConfigToken
 token_target="${token_dir}/client_configuration_token.tok"
+dls_url="${NVIDIA_DLS_URL:-https://dls.home.arpa}"
 
-# ExtensionServiceConfig files are mounted read-only. Copy the token into the
-# service container's writable rootfs and apply NVIDIA's required file mode.
-if [ -s "${token_source}" ]; then
-  mkdir -p "${token_dir}"
-  cp "${token_source}" "${token_target}"
-  chmod 0744 "${token_target}"
-fi
+# NVIDIA License System client tokens are fetched at runtime. The endpoint is
+# HTTPS-only and the fetcher uses the system CA bundle; certificate validation
+# is never disabled. A Talos trusted root can therefore authorize a private CA.
+mkdir -p "${token_dir}"
+/usr/local/bin/nvidia-dls-token-fetcher \
+  --url "${dls_url}" \
+  --output "${token_target}"
+
+chmod 0744 "${token_target}"
 
 # Optional override for installations using a legacy GRID license server.
-# For NVIDIA License System (DLS/CLS), the service endpoint is carried by the
-# client configuration token and the packaged FeatureType=1 config is used.
+# DLS/CLS uses the downloaded client token and the packaged FeatureType=1 config.
 if [ -s /run/gridd.conf ]; then
   cp /run/gridd.conf /etc/nvidia/gridd.conf
   chmod 0644 /etc/nvidia/gridd.conf
@@ -23,10 +24,6 @@ fi
 
 if [ ! -s /etc/nvidia/gridd.conf ]; then
   echo "Missing /etc/nvidia/gridd.conf" >&2
-  exit 1
-fi
-if [ ! -s "${token_target}" ] && [ ! -s /run/gridd.conf ]; then
-  echo "Missing NVIDIA client configuration token. Supply /run/nvidia-client-token.tok with ExtensionServiceConfig." >&2
   exit 1
 fi
 
