@@ -34,7 +34,7 @@ steps:
       - |
         set -euxo pipefail
         cd /tmp/libnvidia-container
-        make -j"$(nproc)" REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_NVCGO=yes WITH_LIBELF=no WITH_TIRPC=no WITH_SECCOMP=yes
+        make -j"$(nproc)" MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_NVCGO=yes WITH_LIBELF=no WITH_TIRPC=no WITH_SECCOMP=yes
         make install LDCONFIG=true DESTDIR=/rootfs prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc
         cd /tmp/nvidia-container-toolkit
         make cmds
