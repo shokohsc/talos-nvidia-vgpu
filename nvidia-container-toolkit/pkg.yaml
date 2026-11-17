@@ -103,7 +103,7 @@ steps:
         cd /tmp/libnvidia-container
         # Build and install the pinned nvidia-modprobe-utils static archive into deps/usr/local/lib.
         # libnvidia-container links this archive when producing libnvidia-container.so.
-        make deps
+        make deps MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0
         make -j"$(nproc)" MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_NVCGO=yes WITH_LIBELF=yes WITH_TIRPC=no WITH_SECCOMP=yes CPPFLAGS="-D_GNU_SOURCE -I/usr/include/tirpc" LDLIBS="-ltirpc"
         make install LDCONFIG=true DESTDIR=/rootfs prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc
         cd /tmp/nvidia-container-toolkit
