@@ -525,12 +525,15 @@ steps:
         # It must be the GNU runtime staged from Debian, not a musl build
         # dependency accidentally copied into the service rootfs.
         elf_readelf="$(command -v llvm-readelf || command -v readelf || true)"
-        if [[ -n "${elf_readelf}" ]]; then
-          echo "=== nvidia-gridd ELF dynamic section ==="
-          "${elf_readelf}" -d "${gridd_root}/usr/bin/nvidia-gridd" || true
-          echo "=== nvidia-gridd required symbol versions ==="
-          "${elf_readelf}" -V "${gridd_root}/usr/bin/nvidia-gridd" || true
-          libstdcpp_path="$(printf '%s\\n' "${gridd_dependencies}" | awk '$1 == "libstdc++.so.6" && $2 == "=>" { print $3; exit }')"
+        if [[ -z "${elf_readelf}" ]]; then
+          echo "llvm-readelf or readelf is required to validate the nvidia-gridd C++ runtime" >&2
+          exit 1
+        fi
+        echo "=== nvidia-gridd ELF dynamic section ==="
+        "${elf_readelf}" -d "${gridd_root}/usr/bin/nvidia-gridd"
+        echo "=== nvidia-gridd required symbol versions ==="
+        "${elf_readelf}" -V "${gridd_root}/usr/bin/nvidia-gridd"
+        libstdcpp_path="$(printf '%s\\n' "${gridd_dependencies}" | awk '$1 == "libstdc++.so.6" && $2 == "=>" { print $3; exit }')"
           case "${libstdcpp_path}" in
             "${gridd_root}"/*) resolved_libstdcpp="${libstdcpp_path}" ;;
             /rootfs/*) resolved_libstdcpp="${libstdcpp_path}" ;;
@@ -556,9 +559,6 @@ steps:
             echo "Could not map the loader's libstdc++.so.6 resolution to the service rootfs: ${libstdcpp_path}" >&2
             exit 1
           fi
-        else
-          echo "WARNING: neither llvm-readelf nor readelf is available; skipping ELF symbol-version diagnostics" >&2
-        fi
 
         if [[ -d /pkg/driver/firmware ]]; then
           mkdir -p /rootfs/usr/lib/firmware/nvidia
