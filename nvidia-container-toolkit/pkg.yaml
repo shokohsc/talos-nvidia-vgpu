@@ -9,7 +9,7 @@ install:
   - rpcsvc-proto
   - libcap-dev
   - libseccomp-dev
-  - libelf-dev
+  - elfutils-dev
   - pkgconf
   - coreutils
   - curl
