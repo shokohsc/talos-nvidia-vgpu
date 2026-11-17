@@ -33,6 +33,41 @@ steps:
         tar -xzf /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz -C /tmp/libnvidia-container
         tar -xzf /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz -C /tmp/nvidia-container-toolkit
         tar -xzf /pkg/sources-archive/nvidia-modprobe-550.54.14.tar.gz -C /tmp/nvidia-modprobe
+        # NVIDIA libnvidia-container assumes glibc headers/APIs in two places.
+        # Keep the extension musl-native by applying small, auditable compatibility fixes.
+        cat > /tmp/libnvidia-container-musl.patch <<'PATCH'
+        --- a/src/rpc.h
+        +++ b/src/rpc.h
+        @@
+         #include <sys/types.h>
+        +
+        +#include <signal.h>
+         
+         #include <rpc/rpc.h>
+        --- a/src/nvc_ldcache.c
+        +++ b/src/nvc_ldcache.c
+        @@
+         #include <sys/types.h>
+         #include <sys/wait.h>
+        +
+        +#include <sys/auxv.h>
+        +#include <linux/sched.h>
+        @@
+         #include "xfuncs.h"
+        +
+        +#if !defined(__GLIBC__)
+        +static inline char *
+        +secure_getenv(const char *name)
+        +{
+        +        return getauxval(AT_SECURE) ? NULL : getenv(name);
+        +}
+        +#endif
+        @@
+        -        if (unshare(CLONE_NEWNS) < 0)
+        +        if (syscall(SYS_unshare, CLONE_NEWNS) < 0)
+                     goto fail;
+        PATCH
+        patch -d /tmp/libnvidia-container -p1 < /tmp/libnvidia-container-musl.patch
         # libnvidia-container's makefile downloads this pinned dependency itself.
         # Pre-populate its expected source directory and stamp to keep builds offline.
         mkdir -p /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8
