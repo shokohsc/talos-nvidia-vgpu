@@ -1,0 +1,42 @@
+name: NVIDIA Container Toolkit build
+on:
+  pull_request:
+    paths:
+      - "Pkgfile"
+      - "base/**"
+      - "nvidia-container-toolkit/**"
+      - ".github/workflows/container-toolkit-build.yaml"
+  push:
+    branches: [main, "feature/**"]
+    paths:
+      - "Pkgfile"
+      - "base/**"
+      - "nvidia-container-toolkit/**"
+      - ".github/workflows/container-toolkit-build.yaml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-extension:
+    name: Build NVIDIA Container Toolkit 1.17.8 for Talos v1.13.10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build toolkit system extension
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Pkgfile \
+            --target nvidia-container-toolkit \
+            --build-arg TALOS_VERSION=v1.13.10 \
+            --output "type=oci,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.17.8-talos-v1.13.10.oci.tar" \
+            .
+      - name: Upload toolkit extension OCI image
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvidia-container-toolkit-1.17.8-talos-v1.13.10
+          path: ${{ runner.temp }}/nvidia-container-toolkit-1.17.8-talos-v1.13.10.oci.tar
+          if-no-files-found: error
+          retention-days: 14
