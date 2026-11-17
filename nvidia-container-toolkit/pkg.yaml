@@ -36,6 +36,18 @@ steps:
         # NVIDIA libnvidia-container assumes glibc headers/APIs in two places.
         # Keep the extension musl-native by applying small, auditable compatibility fixes.
         cat > /tmp/libnvidia-container-musl.patch <<'PATCH'
+        --- a/src/nvc.c
+        +++ b/src/nvc.c
+        @@ -5,3 +5,8 @@
+        -#include <gnu/lib-names.h>
+        +#if defined(__GLIBC__)
+        +#include <gnu/lib-names.h>
+        +#else
+        +#define LIB_DIR "/lib"
+        +#define LD_SO "ld-musl-x86_64.so.1"
+        +#endif
+         
+         #include <sys/types.h>
         --- a/src/rpc.h
         +++ b/src/rpc.h
         @@ -19,3 +19,5 @@
