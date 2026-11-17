@@ -63,9 +63,19 @@ fi
 # nvidia-gridd daemonizes on the standard Linux client. If this build keeps it
 # in the foreground, this command remains the service's main process. If it
 # forks, monitor the PID file so Talos restarts the service if the daemon exits.
+# Preserve the loader/daemon exit status. With set -e, a foreground
+# nvidia-gridd failure would otherwise terminate this wrapper before it can
+# report the status; a daemonizing build returns here and is monitored below.
+set +e
 /usr/local/lib/ld-linux-x86-64.so.2 \
   --library-path /usr/local/lib:/usr/local/lib/nvidia/gridd:/usr/lib:/lib \
   /usr/bin/nvidia-gridd
+gridd_status=$?
+set -e
+if [ "${gridd_status}" -ne 0 ]; then
+  echo "nvidia-gridd launcher exited with status ${gridd_status}" >&2
+  exit "${gridd_status}"
+fi
 
 pid=
 attempt=0
