@@ -451,10 +451,10 @@ steps:
             exit 1
           }
           # Debian's soname entries are symlinks. Dereference them so the
-  # isolated service rootfs contains the real ELF objects, not dangling
-  # links whose versioned targets were not copied alongside them.
-  cp --dereference --preserve=mode,timestamps "${cxx_runtime}/${runtime_library}" "${gridd_stage}/usr/local/lib/"
-  test -f "${gridd_stage}/usr/local/lib/${runtime_library}"
+          # isolated service rootfs contains the real ELF objects, not dangling
+          # links whose versioned targets were not copied alongside them.
+          cp --dereference --preserve=mode,timestamps "${cxx_runtime}/${runtime_library}" "${gridd_stage}/usr/local/lib/"
+          test -f "${gridd_stage}/usr/local/lib/${runtime_library}"
         done
         test -e "${gridd_stage}/usr/local/lib/libstdc++.so.6"
         test -e "${gridd_stage}/usr/local/lib/libgcc_s.so.1"
