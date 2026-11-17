@@ -14,6 +14,13 @@ dependencies:
   - image: ghcr.io/siderolabs/glibc:2.44
     from: /rootfs/usr/local
     to: /usr/local
+  # nvidia-gridd is a GNU C++ executable. The LLVM/Talos package build
+  # environment is musl-based, so never reuse its /lib/libstdc++.so.6.
+  # Bring in the glibc-linked Debian 12 C++ runtime and stage only the two
+  # runtime libraries needed by the daemon.
+  - image: debian:bookworm-slim
+    from: /usr/lib/x86_64-linux-gnu
+    to: /tmp/nvidia-gridd-cxx-runtime
   # NVIDIA's installer requires ldconfig on PATH, too.
   - image: ghcr.io/siderolabs/glibc:2.44
     from: /rootfs/usr/bin
@@ -232,6 +239,7 @@ steps:
         fi
     install:
       - |
+        trap 'status=$?; echo "ERROR: nvidia-vgpu-guest install failed at line ${LINENO}: ${BASH_COMMAND} (exit ${status})" >&2; exit "${status}"' ERR
         kernel_release="$(cat /src/include/config/kernel.release)"
         module_dir="/rootfs/usr/lib/modules/${kernel_release}"
         mkdir -p "${module_dir}" /rootfs/usr/local/lib/modprobe.d /rootfs/usr/lib /rootfs/usr/bin
@@ -283,7 +291,7 @@ steps:
           # Include dangling symlinks: the validator checks their paths too.
           [[ -e "${utility}" || -L "${utility}" ]] || continue
           case "${utility##*/}" in
-            nvidia-smi|nvidia-modprobe) ;;
+            nvidia-smi|nvidia-modprobe|nvidia-gridd) ;;
             *) rm -f "${utility}" ;;
           esac
         done
@@ -396,6 +404,171 @@ steps:
           exit 1
         }
         install -D -m 0644 /pkg/files/60-nvidia-vgpu.rules /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
+
+        # NVIDIA License System client. Keep the daemon and its matching
+        # userspace libraries in a dedicated Talos extension-service rootfs;
+        # the licensing token is injected later through ExtensionServiceConfig
+        # and is deliberately never copied into this OCI image.
+        test -x /rootfs/usr/bin/nvidia-gridd || {
+          echo "NVIDIA installer did not install /usr/bin/nvidia-gridd" >&2
+          find /rootfs -name 'nvidia-gridd*' -print >&2
+          exit 1
+        }
+        gridd_stage="/tmp/nvidia-gridd-rootfs"
+        gridd_root="/rootfs/usr/local/lib/containers/nvidia-gridd"
+        rm -rf "${gridd_stage}"
+        mkdir -p "${gridd_stage}/usr/bin" "${gridd_stage}/usr/local/bin" "${gridd_stage}/usr/local/lib" "${gridd_stage}/bin" "${gridd_stage}/etc/nvidia" "${gridd_stage}/var/run" "${gridd_stage}/run"
+        cp -a /rootfs/usr/local/lib "${gridd_stage}/usr/local/"
+        # The glibc dependency is mounted into the package build stage at
+        # /usr/local, not into /rootfs. The licensing daemon runs in its own
+        # service rootfs, so bundle the same loader and glibc runtime there.
+        test -x /usr/local/lib/ld-linux-x86-64.so.2 || {
+          echo "Missing glibc loader in package build stage" >&2
+          exit 1
+        }
+        cp -a /usr/local/lib/. "${gridd_stage}/usr/local/lib/"
+        # The GRID 535 nvidia-gridd executable requests the dependency name
+        # "libc.so" at runtime, while glibc normally exposes its runtime ABI as
+        # libc.so.6. The glibc package's libc.so is a link-time linker script,
+        # which the ELF loader cannot load. Replace it in this isolated service
+        # rootfs with a runtime alias to the actual shared object.
+        test -s "${gridd_stage}/usr/local/lib/libc.so.6" || {
+          echo "Missing glibc runtime libc.so.6 in nvidia-gridd service rootfs" >&2
+          exit 1
+        }
+        ln -sfn libc.so.6 "${gridd_stage}/usr/local/lib/libc.so"
+        test -L "${gridd_stage}/usr/local/lib/libc.so"
+        test "$(readlink "${gridd_stage}/usr/local/lib/libc.so")" = "libc.so.6"
+
+        # Supply GNU libstdc++/libgcc_s from a glibc-based runtime, not from
+        # the musl-based LLVM build image. The loader searches /usr/local/lib
+        # first, so these copies take precedence over any accidental /lib
+        # runtime and remain isolated to the licensing service.
+        cxx_runtime="/tmp/nvidia-gridd-cxx-runtime"
+        for runtime_library in libstdc++.so.6 libgcc_s.so.1; do
+          test -e "${cxx_runtime}/${runtime_library}" || {
+            echo "Missing GNU C++ runtime library: ${cxx_runtime}/${runtime_library}" >&2
+            exit 1
+          }
+          # Debian's soname entries are symlinks. Dereference them so the
+          # isolated service rootfs contains the real ELF objects, not dangling
+          # links whose versioned targets were not copied alongside them.
+          cp --dereference --preserve=mode,timestamps "${cxx_runtime}/${runtime_library}" "${gridd_stage}/usr/local/lib/"
+          test -f "${gridd_stage}/usr/local/lib/${runtime_library}"
+        done
+        test -e "${gridd_stage}/usr/local/lib/libstdc++.so.6"
+        test -e "${gridd_stage}/usr/local/lib/libgcc_s.so.1"
+        install -m 0755 /rootfs/usr/bin/nvidia-gridd "${gridd_stage}/usr/bin/nvidia-gridd"
+        # nvidia-gridd is only executed inside the isolated extension-service
+        # rootfs. Do not leave a second copy in the host extension rootfs:
+        # Talos' extension allowlist rejects /usr/bin/nvidia-gridd, while the
+        # service container has its own /usr/bin and runtime dependencies.
+        rm -f /rootfs/usr/bin/nvidia-gridd
+        test ! -e /rootfs/usr/bin/nvidia-gridd || {
+          echo "nvidia-gridd must only be installed in its extension-service rootfs" >&2
+          exit 1
+        }
+        test -x /bin/busybox || {
+          echo "The Talos tools image must provide /bin/busybox for the nvidia-gridd service wrapper" >&2
+          exit 1
+        }
+        install -m 0755 /bin/busybox "${gridd_stage}/bin/busybox"
+        ln -s busybox "${gridd_stage}/bin/sh"
+        # Do not copy the build stage's /lib: it is musl-based and contains
+        # an unversioned libstdc++.so.6 that causes nvidia-gridd to exit.
+        cat > "${gridd_stage}/etc/nvidia/gridd.conf" <<'EOF'
+        # NVIDIA License System client configuration for a Talos vGPU guest.
+        # The service selects the correct license entitlement from the vGPU profile.
+        FeatureType=1
+        EnableUI=FALSE
+        EOF
+        # Build a small static HTTPS client so token retrieval uses Go's
+        # system trust store and does not depend on BusyBox wget TLS behavior.
+        command -v go >/dev/null 2>&1 || {
+          echo "Go compiler is required to build the DLS token fetcher" >&2
+          exit 1
+        }
+        # Exercise the explicit system-plus-Talos CA loading path before
+        # compiling the static fetcher shipped in the service rootfs.
+        go test /pkg/files/nvidia-dls-token-fetcher.go /pkg/files/nvidia-dls-token-fetcher_test.go
+        CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
+          -o "${gridd_stage}/usr/local/bin/nvidia-dls-token-fetcher" \
+          /pkg/files/nvidia-dls-token-fetcher.go
+        install -m 0755 /pkg/files/nvidia-gridd-wrapper.sh "${gridd_stage}/usr/local/bin/nvidia-gridd-wrapper"
+        mkdir -p "${gridd_root}"
+        cp -a "${gridd_stage}/." "${gridd_root}/"
+        mkdir -p /rootfs/usr/local/etc/containers
+        install -m 0644 /pkg/nvidia-gridd.yaml /rootfs/usr/local/etc/containers/nvidia-gridd.yaml
+
+        gridd_loader="${gridd_root}/usr/local/lib/ld-linux-x86-64.so.2"
+        test -x "${gridd_loader}" || {
+          echo "Missing glibc loader in nvidia-gridd service rootfs" >&2
+          exit 1
+        }
+        test -s "${gridd_root}/usr/local/lib/nvidia/gridd/libFlxCore64.so" || {
+          echo "Missing NVIDIA licensing library libFlxCore64.so in service rootfs" >&2
+          exit 1
+        }
+        # Do not let set -e hide the dynamic loader's diagnostic when --list
+        # fails. Preserve both its output and status so CI reports the actual
+        # missing executable/library instead of only exit code 127.
+        set +e
+        gridd_dependencies="$("${gridd_loader}" --library-path "${gridd_root}/usr/local/lib:${gridd_root}/usr/local/lib/nvidia/gridd:${gridd_root}/usr/lib:${gridd_root}/lib" --list "${gridd_root}/usr/bin/nvidia-gridd" 2>&1)"
+        gridd_status=$?
+        set -e
+        printf '%s\\n' "${gridd_dependencies}"
+        if [[ "${gridd_status}" -ne 0 ]]; then
+          echo "nvidia-gridd dependency inspection failed with status ${gridd_status}" >&2
+          exit "${gridd_status}"
+        fi
+        if grep -Fq 'not found' <<< "${gridd_dependencies}"; then
+          echo "Unresolved shared-library dependency in nvidia-gridd service rootfs" >&2
+          exit 1
+        fi
+
+        # Record and validate the exact C++ runtime selected by the loader.
+        # It must be the GNU runtime staged from Debian, not a musl build
+        # dependency accidentally copied into the service rootfs.
+        elf_readelf="$(command -v llvm-readelf || command -v readelf || true)"
+        if [[ -z "${elf_readelf}" ]]; then
+          echo "llvm-readelf or readelf is required to validate the nvidia-gridd C++ runtime" >&2
+          exit 1
+        fi
+        echo "=== nvidia-gridd ELF dynamic section ==="
+        "${elf_readelf}" -d "${gridd_root}/usr/bin/nvidia-gridd"
+        echo "=== nvidia-gridd required symbol versions ==="
+        "${elf_readelf}" -V "${gridd_root}/usr/bin/nvidia-gridd"
+        libstdcpp_path="$(printf '%s\n' "${gridd_dependencies}" | awk '$1 == "libstdc++.so.6" && $2 == "=>" { print $3; exit }')"
+        case "${libstdcpp_path}" in
+          "${gridd_root}"/*) resolved_libstdcpp="${libstdcpp_path}" ;;
+          /rootfs/*) resolved_libstdcpp="${libstdcpp_path}" ;;
+          /*) resolved_libstdcpp="${gridd_root}${libstdcpp_path}" ;;
+          *) resolved_libstdcpp="" ;;
+        esac
+        expected_libstdcpp="${gridd_root}/usr/local/lib/libstdc++.so.6"
+        if [[ -n "${resolved_libstdcpp}" && -f "${resolved_libstdcpp}" ]]; then
+          echo "=== Resolved libstdc++.so.6: ${resolved_libstdcpp} ==="
+          "${elf_readelf}" -d "${resolved_libstdcpp}"
+          echo "=== Resolved libstdc++.so.6 exported/required symbol versions ==="
+          cxx_versions="$("${elf_readelf}" -V "${resolved_libstdcpp}")"
+          printf '%s\n' "${cxx_versions}"
+          if [[ "${resolved_libstdcpp}" != "${expected_libstdcpp}" ]]; then
+            echo "nvidia-gridd resolved libstdc++ outside the packaged GNU runtime: ${resolved_libstdcpp}" >&2
+            exit 1
+          fi
+          if ! grep -Fq 'GLIBCXX_3.4' <<< "${cxx_versions}"; then
+            echo "Packaged libstdc++.so.6 has no GLIBCXX_3.4 symbol-version definitions" >&2
+            exit 1
+          fi
+        else
+          echo "Could not map the loader's libstdc++.so.6 resolution to the service rootfs: ${libstdcpp_path}" >&2
+          echo "Full nvidia-gridd loader dependency list:" >&2
+          printf '%s\n' "${gridd_dependencies}" >&2
+          echo "Packaged GNU C++ runtime files:" >&2
+          ls -la "${gridd_root}/usr/local/lib/"libstdc++.so* >&2 || true
+          exit 1
+        fi
+
         if [[ -d /pkg/driver/firmware ]]; then
           mkdir -p /rootfs/usr/lib/firmware/nvidia
           cp -a /pkg/driver/firmware/. /rootfs/usr/lib/firmware/nvidia/
@@ -421,6 +594,13 @@ steps:
           exit 1
         }
         test -x /rootfs/usr/bin/nvidia-modprobe
+        test ! -e /rootfs/usr/bin/nvidia-gridd
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
+        test -s /rootfs/usr/local/etc/containers/nvidia-gridd.yaml
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-gridd-wrapper
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-dls-token-fetcher
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
+        test -s /rootfs/usr/local/lib/containers/nvidia-gridd/etc/nvidia/gridd.conf
         test -s /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         grep -Fq 'ACTION=="add|bind"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
         grep -Fq 'RUN+="/usr/bin/nvidia-modprobe -c 255 -c 0"' /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules

@@ -14,6 +14,7 @@ jobs:
         run: |
           bash -n scripts/validate-artifacts.sh
           bash -n scripts/extract-driver.sh
+          sh -n nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
       - name: Validate YAML
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML
@@ -34,6 +35,8 @@ jobs:
 
           workflow = pathlib.Path(".github/workflows/driver-build.yaml").read_text()
           yaml.safe_load(workflow)
+          service = pathlib.Path("nvidia-vgpu-guest/nvidia-gridd.yaml").read_text()
+          yaml.safe_load(service)
           print("YAML syntax checks passed")
           PY
       - name: Validate Makefile targets
@@ -41,8 +44,15 @@ jobs:
       - name: Validate required build inputs
         run: |
           test -s nvidia-vgpu-guest/files/nvidia.conf
+          test -s nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
+          test -s nvidia-vgpu-guest/nvidia-gridd.yaml
+          grep -q '^  - network:' nvidia-vgpu-guest/nvidia-gridd.yaml
+          ! grep -q 'configuration: true' nvidia-vgpu-guest/nvidia-gridd.yaml
+          grep -q 'nvidia-gridd' nvidia-vgpu-guest/pkg.yaml
           test -s Dockerfile.kernel-build
           test -x scripts/validate-artifacts.sh
           test -s scripts/extract-driver.sh
           grep -q 'BUILD_ARG_KERNEL_IMAGE' nvidia-vgpu-guest/pkg.yaml
-          grep -q 'Module.symvers' nvidia-vgpu-guest/pkg.yaml
+          grep -q '/src/Module.symvers' nvidia-vgpu-guest/pkg.yaml
+          grep -q 'install -m 0755 /bin/busybox' nvidia-vgpu-guest/pkg.yaml
+          grep -q '/bin/busybox' nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh

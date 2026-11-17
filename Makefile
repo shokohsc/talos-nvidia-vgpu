@@ -4,8 +4,7 @@ NVIDIA_DRIVER_VERSION ?= 535.161.07
 NVIDIA_DRIVER_IMAGE ?= docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
 PKGS_REF ?= 9b044c593c71b0ea6deb9985b7907e008b91220c
 PKGS_DIR ?= _out/pkgs
-KERNEL_BUILD_DIR ?= _out/kernel-build
-KERNEL_IMAGE ?= docker.io/shokohsc/talos-nvidia-vgpu-kernel-build:v1.13.10
+KERNEL_IMAGE ?= ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:talos-$(TALOS_VERSION)-$(PKGS_REF)
 EXTENSION_IMAGE ?= _out/nvidia-vgpu-$(NVIDIA_DRIVER_VERSION)-talos-$(TALOS_VERSION).oci.tar
 
 .PHONY: extract-driver kernel-build build installer-image local clean
@@ -25,9 +24,13 @@ kernel-build:
 		git clone https://github.com/siderolabs/pkgs.git "$(PKGS_DIR)"; \
 	fi
 	git -C "$(PKGS_DIR)" checkout "$(PKGS_REF)"
-	make -C "$(PKGS_DIR)" local-kernel-build PLATFORM="$(PLATFORM)" DEST="$(CURDIR)/$(KERNEL_BUILD_DIR)"
-	docker buildx build --platform "$(PLATFORM)" -f "$(CURDIR)/Dockerfile.kernel-build" \
-		-t "$(KERNEL_IMAGE)" --push "$(KERNEL_BUILD_DIR)"
+	make -C "$(PKGS_DIR)" target-kernel-build PLATFORM="$(PLATFORM)" TARGET_ARGS="--tag=$(KERNEL_IMAGE) --push"
+	docker buildx build --platform "$(PLATFORM)" \
+		--file "$(CURDIR)/Dockerfile.kernel-validate" \
+		--build-arg KERNEL_IMAGE="$(KERNEL_IMAGE)" \
+		--target metadata \
+		--output "type=local,dest=$(CURDIR)/_out/kernel-metadata" .
+	@cat _out/kernel-metadata/kernel-release.txt
 
 build: require-KERNEL_IMAGE
 	@mkdir -p "$(dirname "$(EXTENSION_IMAGE)")"

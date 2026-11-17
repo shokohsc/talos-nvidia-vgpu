@@ -1,0 +1,10 @@
+ARG KERNEL_IMAGE
+FROM ${KERNEL_IMAGE} AS kernel
+FROM ghcr.io/siderolabs/tools:v1.13.0-12-gc70be08 AS validate
+COPY --from=kernel /src/Module.symvers /tmp/Module.symvers
+COPY --from=kernel /src/include/config/kernel.release /tmp/kernel.release
+RUN test -s /tmp/Module.symvers \
+    && test -s /tmp/kernel.release \
+    && cat /tmp/kernel.release
+FROM scratch AS metadata
+COPY --from=validate /tmp/kernel.release /kernel-release.txt
