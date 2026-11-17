@@ -1,5 +1,5 @@
 name: nvidia-container-toolkit
-variant: scratch
+variant: alpine
 shell: /bin/bash
 install:
   - build-base
