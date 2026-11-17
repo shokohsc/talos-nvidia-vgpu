@@ -10,6 +10,7 @@ install:
   - libcap-dev
   - libseccomp-dev
   - pkgconf
+  - coreutils
 dependencies:
   # Keep the validator without merging the Talos tools rootfs over Alpine.
   - image: ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0
