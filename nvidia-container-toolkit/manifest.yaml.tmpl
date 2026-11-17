@@ -1,0 +1,11 @@
+version: v1alpha1
+metadata:
+  name: nvidia-container-toolkit
+  version: "1.17.8-{{ .BUILD_ARG_TALOS_VERSION }}"
+  author: shokohsc
+  description: |
+    NVIDIA Container Toolkit runtime, CLI, hooks, and libnvidia-container for Talos Linux.
+    This extension does not install or replace the NVIDIA GPU driver.
+  compatibility:
+    talos:
+      version: "= {{ .BUILD_ARG_TALOS_VERSION }}"

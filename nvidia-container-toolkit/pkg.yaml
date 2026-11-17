@@ -1,0 +1,71 @@
+name: nvidia-container-toolkit
+variant: scratch
+shell: /bin/bash
+install:
+  - build-base
+  - go
+  - git
+  - curl
+  - tar
+  - bmake
+  - rpcsvc-proto
+  - libcap-dev
+  - libseccomp-dev
+  - pkgconf
+dependencies:
+  - stage: base
+steps:
+  - prepare:
+      - |
+        set -euxo pipefail
+        git clone --depth 1 --branch v1.17.8 https://github.com/NVIDIA/libnvidia-container.git /tmp/libnvidia-container
+        git clone --depth 1 --branch v1.17.8 https://github.com/NVIDIA/nvidia-container-toolkit.git /tmp/nvidia-container-toolkit
+    build:
+      - |
+        set -euxo pipefail
+        cd /tmp/libnvidia-container
+        make -j"$(nproc)" WITH_NVCGO=yes WITH_LIBELF=no WITH_TIRPC=no WITH_SECCOMP=yes
+        make install DESTDIR=/rootfs prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc
+        cd /tmp/nvidia-container-toolkit
+        make cmds
+    install:
+      - |
+        set -euxo pipefail
+        mkdir -p /rootfs/usr/local/bin /rootfs/usr/local/lib /rootfs/usr/local/share/licenses/nvidia-container-toolkit /rootfs/etc/cri/conf.d
+        find /tmp/nvidia-container-toolkit -maxdepth 1 -type f -executable -exec install -m 0755 {} /rootfs/usr/local/bin/ \;
+        test -x /rootfs/usr/local/bin/nvidia-container-runtime
+        test -x /rootfs/usr/local/bin/nvidia-container-runtime-hook
+        test -x /rootfs/usr/local/bin/nvidia-ctk
+        test -x /rootfs/usr/local/bin/nvidia-cdi-hook
+        test -x /rootfs/usr/local/bin/nvidia-container-cli
+        test -s /rootfs/usr/local/lib/libnvidia-container.so.1
+        cp /tmp/libnvidia-container/LICENSE /rootfs/usr/local/share/licenses/nvidia-container-toolkit/
+        cp /tmp/nvidia-container-toolkit/LICENSE /rootfs/usr/local/share/licenses/nvidia-container-toolkit/ 2>/dev/null || true
+        cat > /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part <<'EOF'
+        [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia]
+          privileged_without_host_devices = false
+          runtime_engine = ""
+          runtime_root = ""
+          runtime_type = "io.containerd.runc.v2"
+          [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia.options]
+            BinaryName = "/usr/local/bin/nvidia-container-runtime"
+        EOF
+    test:
+      - |
+        set -euxo pipefail
+        test -x /rootfs/usr/local/bin/nvidia-container-runtime
+        test -x /rootfs/usr/local/bin/nvidia-container-runtime-hook
+        test -x /rootfs/usr/local/bin/nvidia-ctk
+        test -x /rootfs/usr/local/bin/nvidia-cdi-hook
+        test -x /rootfs/usr/local/bin/nvidia-container-cli
+        test -s /rootfs/usr/local/lib/libnvidia-container.so.1
+        grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
+        mkdir -p /extensions-validator-rootfs
+        cp -a /rootfs /extensions-validator-rootfs/rootfs
+        cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
+        /extensions-validator validate --rootfs=/extensions-validator-rootfs --pkg-name="${PKG_NAME}"
+finalize:
+  - from: /rootfs
+    to: /rootfs
+  - from: /pkg/manifest.yaml
+    to: /
