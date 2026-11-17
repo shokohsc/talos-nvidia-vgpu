@@ -46,7 +46,7 @@ steps:
          #include <rpc/rpc.h>
         --- a/src/nvc_ldcache.c
         +++ b/src/nvc_ldcache.c
-        @@
+        @@ -17,3 +17,6 @@
          #include <sys/types.h>
          #include <sys/wait.h>
         +
