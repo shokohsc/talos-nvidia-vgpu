@@ -138,6 +138,12 @@ steps:
         test -x /rootfs/usr/local/bin/nvidia-ctk
         test -x /rootfs/usr/local/bin/nvidia-cdi-hook
         test -x /rootfs/usr/local/bin/nvidia-container-cli
+        # Upstream installs the versioned SONAME file but omits the SONAME symlink
+        # in DESTDIR mode when LDCONFIG is disabled (required for Talos).
+        ln -sfn libnvidia-container.so.1.17.8 /rootfs/usr/local/lib/libnvidia-container.so.1
+        ln -sfn libnvidia-container.so.1 /rootfs/usr/local/lib/libnvidia-container.so
+        ln -sfn libnvidia-container-go.so.1.17.8 /rootfs/usr/local/lib/libnvidia-container-go.so.1
+        ln -sfn libnvidia-container-go.so.1 /rootfs/usr/local/lib/libnvidia-container-go.so
         test -s /rootfs/usr/local/lib/libnvidia-container.so.1
         for runtime_library in libcap.so.2 libseccomp.so.2 libelf.so.1 libtirpc.so.3; do
           library_path="$(find /lib /usr/lib -name "${runtime_library}" -print -quit)"
