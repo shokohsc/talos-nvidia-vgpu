@@ -96,10 +96,19 @@ steps:
         # a zero-valued compatibility definition on musl while preserving the
         # platform-provided value on glibc. Insert directly rather than using
         # a hand-maintained unified diff (whose hunk counts are easy to stale).
-        sed -i '/#include <stdlib.h>/a\\
-        // #ifndef RTLD_DEEPBIND\\
-        // #define RTLD_DEEPBIND 0\\
-        // #endif' /tmp/nvidia-container-toolkit/vendor/github.com/NVIDIA/go-nvml/pkg/dl/dl_linux.go
+        toolkit_nvml_source=/tmp/nvidia-container-toolkit/vendor/github.com/NVIDIA/go-nvml/pkg/dl/dl_linux.go
+        awk '
+          /#include <stdlib.h>/ {
+            print
+            print "// #ifndef RTLD_DEEPBIND"
+            print "// #define RTLD_DEEPBIND 0"
+            print "// #endif"
+            next
+          }
+          { print }
+        ' "${toolkit_nvml_source}" > "${toolkit_nvml_source}.tmp"
+        mv "${toolkit_nvml_source}.tmp" "${toolkit_nvml_source}"
+        grep -Fq '// #define RTLD_DEEPBIND 0' "${toolkit_nvml_source}"
         # libnvidia-container's makefile downloads this pinned dependency itself.
         # Pre-populate its expected source directory and stamp to keep builds offline.
         mkdir -p /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8
