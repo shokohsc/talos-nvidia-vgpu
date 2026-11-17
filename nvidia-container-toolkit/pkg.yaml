@@ -34,6 +34,13 @@ steps:
         tar -xzf /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz -C /tmp/libnvidia-container
         tar -xzf /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz -C /tmp/nvidia-container-toolkit
         tar -xzf /pkg/sources-archive/nvidia-modprobe-550.54.14.tar.gz -C /tmp/nvidia-modprobe
+        # Source archives intentionally omit .git. NVIDIA's makefiles still call
+        # git rev-parse while evaluating dependencies, so seed deterministic local
+        # repositories before invoking make (the release revision is passed below).
+        for source_dir in /tmp/libnvidia-container /tmp/nvidia-container-toolkit; do
+          git -C "${source_dir}" init
+          git -C "${source_dir}" -c user.name='Talos NVIDIA build' -c user.email='build@localhost' commit --allow-empty -m 'Seed source archive revision'
+        done
         # NVIDIA libnvidia-container assumes glibc headers/APIs in two places.
         # Keep the extension musl-native by applying small, auditable compatibility fixes.
         cat > /tmp/libnvidia-container-musl.patch <<'PATCH'
