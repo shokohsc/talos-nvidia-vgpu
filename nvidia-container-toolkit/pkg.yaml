@@ -15,6 +15,8 @@ install:
   - coreutils
   - curl
   - git
+  # Alpine/musl does not provide glibc's argp.h; libnvidia-container's CLI needs it.
+  - argp-standalone
 dependencies:
   # Keep the validator without merging the Talos tools rootfs over Alpine.
   - image: ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0
@@ -104,7 +106,7 @@ steps:
         # Build and install the pinned nvidia-modprobe-utils static archive into deps/usr/local/lib.
         # libnvidia-container links this archive when producing libnvidia-container.so.
         make deps MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_LIBELF=yes
-        make -j"$(nproc)" MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_NVCGO=yes WITH_LIBELF=yes WITH_TIRPC=no WITH_SECCOMP=yes CPPFLAGS="-D_GNU_SOURCE -I/usr/include/tirpc" LDLIBS="-ltirpc"
+        make -j"$(nproc)" MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_NVCGO=yes WITH_LIBELF=yes WITH_TIRPC=no WITH_SECCOMP=yes CPPFLAGS="-D_GNU_SOURCE -I/usr/include/tirpc" LDLIBS="-ltirpc -largp"
         make install LDCONFIG=true DESTDIR=/rootfs prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc
         cd /tmp/nvidia-container-toolkit
         make cmds
