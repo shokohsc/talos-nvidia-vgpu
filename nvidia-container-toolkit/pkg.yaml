@@ -4,8 +4,6 @@ shell: /bin/bash
 install:
   - build-base
   - go
-  - git
-  - curl
   - tar
   - bmake
   - rpcsvc-proto
@@ -21,25 +19,12 @@ steps:
   - prepare:
       - |
         set -euxo pipefail
-        clone_with_retry() {
-          local repository="$1"
-          local destination="$2"
-          local attempt
-          for attempt in 1 2 3 4 5; do
-            if git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 clone --depth 1 --branch v1.17.8 "${repository}" "${destination}"; then
-              return 0
-            fi
-            rm -rf "${destination}"
-            if [ "${attempt}" -lt 5 ]; then
-              echo "Clone failed (attempt ${attempt}/5); retrying after DNS/network backoff" >&2
-              sleep "$((attempt * 10))"
-            fi
-          done
-          echo "Unable to clone ${repository} after 5 attempts" >&2
-          return 1
-        }
-        clone_with_retry https://github.com/NVIDIA/libnvidia-container.git /tmp/libnvidia-container
-        clone_with_retry https://github.com/NVIDIA/nvidia-container-toolkit.git /tmp/nvidia-container-toolkit
+        # Sources are checked out by GitHub Actions on the runner. Do not
+        # depend on DNS/network access from inside the BuildKit sandbox.
+        test -f /pkg/sources/libnvidia-container/Makefile
+        test -f /pkg/sources/nvidia-container-toolkit/Makefile
+        cp -a /pkg/sources/libnvidia-container /tmp/libnvidia-container
+        cp -a /pkg/sources/nvidia-container-toolkit /tmp/nvidia-container-toolkit
     build:
       - |
         set -euxo pipefail
