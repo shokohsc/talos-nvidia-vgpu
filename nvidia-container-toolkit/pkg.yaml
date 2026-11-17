@@ -26,9 +26,17 @@ steps:
         # Talos package templates.
         test -s /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz
         test -s /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
-        mkdir -p /tmp/libnvidia-container /tmp/nvidia-container-toolkit
+        test -s /pkg/sources-archive/nvidia-modprobe-550.54.14.tar.gz
+        mkdir -p /tmp/libnvidia-container /tmp/nvidia-container-toolkit /tmp/nvidia-modprobe
         tar -xzf /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz -C /tmp/libnvidia-container
         tar -xzf /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz -C /tmp/nvidia-container-toolkit
+        tar -xzf /pkg/sources-archive/nvidia-modprobe-550.54.14.tar.gz -C /tmp/nvidia-modprobe
+        # libnvidia-container's makefile downloads this pinned dependency itself.
+        # Pre-populate its expected source directory and stamp to keep builds offline.
+        mkdir -p /tmp/libnvidia-container/deps/src/nvidia-modprobe-550.54.14
+        cp -a /tmp/nvidia-modprobe/modprobe-utils /tmp/libnvidia-container/deps/src/nvidia-modprobe-550.54.14/
+        patch -d /tmp/libnvidia-container/deps/src/nvidia-modprobe-550.54.14 -p1 < /tmp/libnvidia-container/mk/nvidia-modprobe.patch
+        touch /tmp/libnvidia-container/deps/src/nvidia-modprobe-550.54.14/.download_stamp
         test -f /tmp/libnvidia-container/Makefile
         test -f /tmp/nvidia-container-toolkit/Makefile
     build:

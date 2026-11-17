@@ -35,6 +35,12 @@ jobs:
           repository: NVIDIA/nvidia-container-toolkit
           ref: v1.17.8
           path: nvidia-container-toolkit/sources/nvidia-container-toolkit
+      - name: Checkout NVIDIA nvidia-modprobe source
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/nvidia-modprobe
+          ref: 550.54.14
+          path: nvidia-container-toolkit/sources/nvidia-modprobe
       - name: Archive upstream source trees
         shell: bash
         run: |
@@ -42,9 +48,11 @@ jobs:
           mkdir -p nvidia-container-toolkit/sources-archive
           git -C nvidia-container-toolkit/sources/libnvidia-container archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/libnvidia-container-v1.17.8.tar.gz
           git -C nvidia-container-toolkit/sources/nvidia-container-toolkit archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
+          git -C nvidia-container-toolkit/sources/nvidia-modprobe archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/nvidia-modprobe-550.54.14.tar.gz
           rm -rf nvidia-container-toolkit/sources
           test -s nvidia-container-toolkit/sources-archive/libnvidia-container-v1.17.8.tar.gz
           test -s nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
+          test -s nvidia-container-toolkit/sources-archive/nvidia-modprobe-550.54.14.tar.gz
       - uses: docker/setup-buildx-action@v3
       - name: Build toolkit system extension
         run: |
