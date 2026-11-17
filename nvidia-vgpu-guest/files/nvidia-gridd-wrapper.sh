@@ -19,6 +19,11 @@ dls_url="${NVIDIA_DLS_URL:-https://dls.home.arpa}"
 # is absent (for example, after a rootfs/package layout change). A runtime
 # /run/gridd.conf override is reserved for legacy GRID License Server setups.
 "${busybox}" mkdir -p /etc/nvidia
+
+# NVIDIA GRID License System stores its local state under this directory.
+# The service rootfs is isolated from the Talos host, so create the complete
+# hierarchy here before nvidia-gridd attempts to initialize GridLicensing.
+"${busybox}" mkdir -p /var/lib/nvidia/GridLicensing
 if [ -s /run/gridd.conf ]; then
   "${busybox}" cp /run/gridd.conf "${gridd_config}"
   "${busybox}" chmod 0644 "${gridd_config}"
