@@ -25,7 +25,7 @@ steps:
         set -euxo pipefail
         cd /tmp/libnvidia-container
         make -j"$(nproc)" WITH_NVCGO=yes WITH_LIBELF=no WITH_TIRPC=no WITH_SECCOMP=yes
-        make install DESTDIR=/rootfs prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc
+        make install LDCONFIG=true DESTDIR=/rootfs prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc
         cd /tmp/nvidia-container-toolkit
         make cmds
     install:
@@ -39,6 +39,11 @@ steps:
         test -x /rootfs/usr/local/bin/nvidia-cdi-hook
         test -x /rootfs/usr/local/bin/nvidia-container-cli
         test -s /rootfs/usr/local/lib/libnvidia-container.so.1
+        for runtime_library in libcap.so.2 libseccomp.so.2; do
+          library_path="$(find /lib /usr/lib -name "${runtime_library}" -print -quit)"
+          test -n "${library_path}"
+          install -D -m 0755 "${library_path}" "/rootfs/usr/local/lib/${runtime_library}"
+        done
         cp /tmp/libnvidia-container/LICENSE /rootfs/usr/local/share/licenses/nvidia-container-toolkit/
         cp /tmp/nvidia-container-toolkit/LICENSE /rootfs/usr/local/share/licenses/nvidia-container-toolkit/ 2>/dev/null || true
         cat > /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part <<'EOF'

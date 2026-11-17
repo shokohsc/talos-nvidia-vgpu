@@ -70,3 +70,4 @@ jobs:
           grep -q 'nvidia-container-cli' nvidia-container-toolkit/pkg.yaml
           grep -q '10-nvidia-container-runtime.part' nvidia-container-toolkit/pkg.yaml
           ! grep -q 'nvidia-vgpu-guest' nvidia-container-toolkit/pkg.yaml
+          grep -q 'LDCONFIG=true' nvidia-container-toolkit/pkg.yaml

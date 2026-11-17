@@ -112,7 +112,7 @@ The service's runtime logs and NVIDIA's `nvidia-smi -q` license status are the s
 
 ## NVIDIA containerd runtime on Talos
 
-See [docs/containerd-nvidia-runtime.md](docs/containerd-nvidia-runtime.md) for the Talos v1.13 containerd runtime fragment and the machine-configuration patch for registering the `nvidia` handler used by an existing Kubernetes `RuntimeClass`.
+See [docs/containerd-nvidia-runtime.md](docs/containerd-nvidia-runtime.md) for the standalone toolkit extension, which installs the runtime and automatically registers the `nvidia` handler through Talos containerd configuration.
 
 
 ## NVIDIA Container Toolkit
