@@ -94,23 +94,12 @@ steps:
         # go-nvml references glibc's RTLD_DEEPBIND from dlfcn.h. musl does not
         # define it; deep binding is a glibc-specific loader behavior, so use
         # a zero-valued compatibility definition on musl while preserving the
-        # platform-provided value on glibc.
-        cat > /tmp/nvidia-container-toolkit-musl.patch <<'PATCH'
-        --- a/vendor/github.com/NVIDIA/go-nvml/pkg/dl/dl_linux.go
-        +++ b/vendor/github.com/NVIDIA/go-nvml/pkg/dl/dl_linux.go
-        @@ -17,6 +17,10 @@
-         // #cgo LDFLAGS: -ldl
-         // #include <dlfcn.h>
-         // #include <stdlib.h>
-        +// #ifndef RTLD_DEEPBIND
-        +// #define RTLD_DEEPBIND 0
-        +// #endif
-         import "C"
-         
-         const (
-        PATCH
-        sed -i 's/^  //' /tmp/nvidia-container-toolkit-musl.patch
-        patch -d /tmp/nvidia-container-toolkit -p1 < /tmp/nvidia-container-toolkit-musl.patch
+        # platform-provided value on glibc. Insert directly rather than using
+        # a hand-maintained unified diff (whose hunk counts are easy to stale).
+        sed -i '/#include <stdlib.h>/a\\
+        // #ifndef RTLD_DEEPBIND\\
+        // #define RTLD_DEEPBIND 0\\
+        // #endif' /tmp/nvidia-container-toolkit/vendor/github.com/NVIDIA/go-nvml/pkg/dl/dl_linux.go
         # libnvidia-container's makefile downloads this pinned dependency itself.
         # Pre-populate its expected source directory and stamp to keep builds offline.
         mkdir -p /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8
