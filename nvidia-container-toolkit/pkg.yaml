@@ -38,7 +38,7 @@ steps:
         cat > /tmp/libnvidia-container-musl.patch <<'PATCH'
         --- a/src/rpc.h
         +++ b/src/rpc.h
-        @@ -19,6 +19,8 @@
+        @@ -19,3 +19,5 @@
          #include <sys/types.h>
         +
         +#include <signal.h>
@@ -46,13 +46,13 @@ steps:
          #include <rpc/rpc.h>
         --- a/src/nvc_ldcache.c
         +++ b/src/nvc_ldcache.c
-        @@ -17,3 +17,6 @@
+        @@ -17,2 +17,5 @@
          #include <sys/types.h>
          #include <sys/wait.h>
         +
         +#include <sys/auxv.h>
         +#include <linux/sched.h>
-        @@ -39,6 +42,15 @@
+        @@ -39,1 +42,9 @@
          #include "xfuncs.h"
         +
         +#if !defined(__GLIBC__)
@@ -62,7 +62,7 @@ steps:
         +        return getauxval(AT_SECURE) ? NULL : getenv(name);
         +}
         +#endif
-        @@ -110,7 +122,7 @@
+        @@ -110,2 +122,2 @@
         -        if (unshare(CLONE_NEWNS) < 0)
         +        if (syscall(SYS_unshare, CLONE_NEWNS) < 0)
                      goto fail;
