@@ -28,6 +28,8 @@ jobs:
         run: |
           docker buildx build \
             --platform linux/amd64 \
+            --network host \
+            --allow network.host \
             --file Pkgfile \
             --target nvidia-container-toolkit \
             --build-arg TALOS_VERSION=v1.13.10 \
