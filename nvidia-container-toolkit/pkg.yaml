@@ -19,12 +19,16 @@ steps:
   - prepare:
       - |
         set -euxo pipefail
-        # Sources are checked out by GitHub Actions on the runner. Do not
-        # depend on DNS/network access from inside the BuildKit sandbox.
-        test -f /pkg/sources/libnvidia-container/Makefile
-        test -f /pkg/sources/nvidia-container-toolkit/Makefile
-        cp -a /pkg/sources/libnvidia-container /tmp/libnvidia-container
-        cp -a /pkg/sources/nvidia-container-toolkit /tmp/nvidia-container-toolkit
+        # The runner archives upstream Git trees before bldr sees the package.
+        # This prevents bldr from interpreting vendored Go *.tmpl fixtures as
+        # Talos package templates.
+        test -s /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz
+        test -s /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
+        mkdir -p /tmp/libnvidia-container /tmp/nvidia-container-toolkit
+        tar -xzf /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz -C /tmp/libnvidia-container
+        tar -xzf /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz -C /tmp/nvidia-container-toolkit
+        test -f /tmp/libnvidia-container/Makefile
+        test -f /tmp/nvidia-container-toolkit/Makefile
     build:
       - |
         set -euxo pipefail
