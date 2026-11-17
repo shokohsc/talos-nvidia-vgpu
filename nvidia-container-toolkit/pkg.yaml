@@ -38,16 +38,20 @@ steps:
         cat > /tmp/libnvidia-container-musl.patch <<'PATCH'
         --- a/src/nvc.c
         +++ b/src/nvc.c
-        @@ -5,3 +5,8 @@
+        @@ -5,3 +5,4 @@
         -#include <gnu/lib-names.h>
         +#if defined(__GLIBC__)
         +#include <gnu/lib-names.h>
-        +#else
-        +#define LIB_DIR "/lib"
-        +#define LD_SO "ld-musl-x86_64.so.1"
         +#endif
          
          #include <sys/types.h>
+        @@ -24,1 +25,5 @@
+        -const char interpreter[] __attribute__((section(".interp"))) = LIB_DIR "/" LD_SO;
+        +#if defined(__GLIBC__)
+        +const char interpreter[] __attribute__((section(".interp"))) = LIB_DIR "/" LD_SO;
+        +#else
+        +const char interpreter[] __attribute__((section(".interp"))) = "/lib/ld-musl-x86_64.so.1";
+        +#endif
         --- a/src/rpc.h
         +++ b/src/rpc.h
         @@ -19,3 +19,5 @@
@@ -58,26 +62,22 @@ steps:
          #include <rpc/rpc.h>
         --- a/src/nvc_ldcache.c
         +++ b/src/nvc_ldcache.c
-        @@ -17,2 +17,5 @@
+        @@ -17,2 +17,3 @@
          #include <sys/types.h>
          #include <sys/wait.h>
         +
-        +#include <sys/auxv.h>
         +#include <linux/sched.h>
-        @@ -39,1 +42,9 @@
-         #include "xfuncs.h"
-        +
-        +#if !defined(__GLIBC__)
-        +static inline char *
-        +secure_getenv(const char *name)
-        +{
-        +        return getauxval(AT_SECURE) ? NULL : getenv(name);
-        +}
-        +#endif
-        @@ -110,2 +122,2 @@
+        @@ -110,2 +111,2 @@
         -        if (unshare(CLONE_NEWNS) < 0)
         +        if (syscall(SYS_unshare, CLONE_NEWNS) < 0)
                      goto fail;
+        --- a/src/nvc_info.c
+        +++ b/src/nvc_info.c
+        @@ -7,3 +7,4 @@
+         #include <errno.h>
+         #include <limits.h>
+        +#include <libgen.h>
+         #include <nvidia-modprobe-utils.h>
         PATCH
         sed -i 's/^  //' /tmp/libnvidia-container-musl.patch
         patch -d /tmp/libnvidia-container -p1 < /tmp/libnvidia-container-musl.patch
