@@ -38,7 +38,7 @@ steps:
         cat > /tmp/libnvidia-container-musl.patch <<'PATCH'
         --- a/src/nvc.c
         +++ b/src/nvc.c
-        @@ -5,3 +5,4 @@
+        @@ -5,3 +5,5 @@
         -#include <gnu/lib-names.h>
         +#if defined(__GLIBC__)
         +#include <gnu/lib-names.h>
@@ -62,7 +62,7 @@ steps:
          #include <rpc/rpc.h>
         --- a/src/nvc_ldcache.c
         +++ b/src/nvc_ldcache.c
-        @@ -17,2 +17,3 @@
+        @@ -17,2 +17,4 @@
          #include <sys/types.h>
          #include <sys/wait.h>
         +
