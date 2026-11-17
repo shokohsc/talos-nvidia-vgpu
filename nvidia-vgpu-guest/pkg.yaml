@@ -239,6 +239,7 @@ steps:
         fi
     install:
       - |
+        trap 'status=$?; echo "ERROR: nvidia-vgpu-guest install failed at line ${LINENO}: ${BASH_COMMAND} (exit ${status})" >&2; exit "${status}"' ERR
         kernel_release="$(cat /src/include/config/kernel.release)"
         module_dir="/rootfs/usr/lib/modules/${kernel_release}"
         mkdir -p "${module_dir}" /rootfs/usr/local/lib/modprobe.d /rootfs/usr/lib /rootfs/usr/bin
@@ -533,32 +534,36 @@ steps:
         "${elf_readelf}" -d "${gridd_root}/usr/bin/nvidia-gridd"
         echo "=== nvidia-gridd required symbol versions ==="
         "${elf_readelf}" -V "${gridd_root}/usr/bin/nvidia-gridd"
-        libstdcpp_path="$(printf '%s\\n' "${gridd_dependencies}" | awk '$1 == "libstdc++.so.6" && $2 == "=>" { print $3; exit }')"
-          case "${libstdcpp_path}" in
-            "${gridd_root}"/*) resolved_libstdcpp="${libstdcpp_path}" ;;
-            /rootfs/*) resolved_libstdcpp="${libstdcpp_path}" ;;
-            /*) resolved_libstdcpp="${gridd_root}${libstdcpp_path}" ;;
-            *) resolved_libstdcpp="" ;;
-          esac
-          expected_libstdcpp="${gridd_root}/usr/local/lib/libstdc++.so.6"
-          if [[ -n "${resolved_libstdcpp}" && -f "${resolved_libstdcpp}" ]]; then
-            echo "=== Resolved libstdc++.so.6: ${resolved_libstdcpp} ==="
-            "${elf_readelf}" -d "${resolved_libstdcpp}"
-            echo "=== Resolved libstdc++.so.6 exported/required symbol versions ==="
-            cxx_versions="$("${elf_readelf}" -V "${resolved_libstdcpp}")"
-            printf '%s\\n' "${cxx_versions}"
-            if [[ "${resolved_libstdcpp}" != "${expected_libstdcpp}" ]]; then
-              echo "nvidia-gridd resolved libstdc++ outside the packaged GNU runtime: ${resolved_libstdcpp}" >&2
-              exit 1
-            fi
-            if ! grep -Fq 'GLIBCXX_3.4' <<< "${cxx_versions}"; then
-              echo "Packaged libstdc++.so.6 has no GLIBCXX_3.4 symbol-version definitions" >&2
-              exit 1
-            fi
-          else
-            echo "Could not map the loader's libstdc++.so.6 resolution to the service rootfs: ${libstdcpp_path}" >&2
+        libstdcpp_path="$(printf '%s\n' "${gridd_dependencies}" | awk '$1 == "libstdc++.so.6" && $2 == "=>" { print $3; exit }')"
+        case "${libstdcpp_path}" in
+          "${gridd_root}"/*) resolved_libstdcpp="${libstdcpp_path}" ;;
+          /rootfs/*) resolved_libstdcpp="${libstdcpp_path}" ;;
+          /*) resolved_libstdcpp="${gridd_root}${libstdcpp_path}" ;;
+          *) resolved_libstdcpp="" ;;
+        esac
+        expected_libstdcpp="${gridd_root}/usr/local/lib/libstdc++.so.6"
+        if [[ -n "${resolved_libstdcpp}" && -f "${resolved_libstdcpp}" ]]; then
+          echo "=== Resolved libstdc++.so.6: ${resolved_libstdcpp} ==="
+          "${elf_readelf}" -d "${resolved_libstdcpp}"
+          echo "=== Resolved libstdc++.so.6 exported/required symbol versions ==="
+          cxx_versions="$("${elf_readelf}" -V "${resolved_libstdcpp}")"
+          printf '%s\n' "${cxx_versions}"
+          if [[ "${resolved_libstdcpp}" != "${expected_libstdcpp}" ]]; then
+            echo "nvidia-gridd resolved libstdc++ outside the packaged GNU runtime: ${resolved_libstdcpp}" >&2
             exit 1
           fi
+          if ! grep -Fq 'GLIBCXX_3.4' <<< "${cxx_versions}"; then
+            echo "Packaged libstdc++.so.6 has no GLIBCXX_3.4 symbol-version definitions" >&2
+            exit 1
+          fi
+        else
+          echo "Could not map the loader's libstdc++.so.6 resolution to the service rootfs: ${libstdcpp_path}" >&2
+          echo "Full nvidia-gridd loader dependency list:" >&2
+          printf '%s\n' "${gridd_dependencies}" >&2
+          echo "Packaged GNU C++ runtime files:" >&2
+          ls -la "${gridd_root}/usr/local/lib/"libstdc++.so* >&2 || true
+          exit 1
+        fi
 
         if [[ -d /pkg/driver/firmware ]]; then
           mkdir -p /rootfs/usr/lib/firmware/nvidia
