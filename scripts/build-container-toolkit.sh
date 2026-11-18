@@ -4,16 +4,27 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 archive_dir="${repo_root}/nvidia-container-toolkit/sources-archive"
 output_dir="${repo_root}/nvidia-container-toolkit/prebuilt"
+source_dir="${repo_root}/_out/toolkit-sources"
+
+mkdir -p "${archive_dir}"
+if [[ ! -s "${archive_dir}/libnvidia-container-v1.17.8.tar.gz" ||
+      ! -s "${archive_dir}/nvidia-container-toolkit-v1.17.8.tar.gz" ||
+      ! -s "${archive_dir}/nvidia-modprobe-550.54.14.tar.gz" ]]; then
+  rm -rf "${source_dir}"
+  mkdir -p "${source_dir}"
+  git clone --depth 1 --branch v1.17.8 https://github.com/NVIDIA/libnvidia-container.git "${source_dir}/libnvidia-container"
+  git clone --depth 1 --branch v1.17.8 https://github.com/NVIDIA/nvidia-container-toolkit.git "${source_dir}/nvidia-container-toolkit"
+  git clone --depth 1 --branch 550.54.14 https://github.com/NVIDIA/nvidia-modprobe.git "${source_dir}/nvidia-modprobe"
+  git -C "${source_dir}/libnvidia-container" archive --format=tar HEAD | gzip -n > "${archive_dir}/libnvidia-container-v1.17.8.tar.gz"
+  git -C "${source_dir}/nvidia-container-toolkit" archive --format=tar HEAD | gzip -n > "${archive_dir}/nvidia-container-toolkit-v1.17.8.tar.gz"
+  git -C "${source_dir}/nvidia-modprobe" archive --format=tar HEAD | gzip -n > "${archive_dir}/nvidia-modprobe-550.54.14.tar.gz"
+fi
 
 for archive in \
   libnvidia-container-v1.17.8.tar.gz \
   nvidia-container-toolkit-v1.17.8.tar.gz \
   nvidia-modprobe-550.54.14.tar.gz; do
-  if [[ ! -s "${archive_dir}/${archive}" ]]; then
-    echo "Missing source archive: ${archive_dir}/${archive}" >&2
-    echo "Run the source checkout/archive steps from .github/workflows/container-toolkit-build.yaml first." >&2
-    exit 1
-  fi
+  test -s "${archive_dir}/${archive}"
 done
 
 rm -rf "${output_dir}"
