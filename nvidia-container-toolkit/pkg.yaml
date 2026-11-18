@@ -36,6 +36,15 @@ steps:
         tar -xzf /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz -C /tmp/libnvidia-container
         tar -xzf /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz -C /tmp/nvidia-container-toolkit
         tar -xzf /pkg/sources-archive/nvidia-modprobe-550.54.14.tar.gz -C /tmp/nvidia-modprobe
+        # Talos extensions may not add files under /usr/bin. Patch upstream
+        # defaults to the extension-approved /usr/local/bin location.
+        toolkit_config=/tmp/nvidia-container-toolkit/internal/config/config.go
+        test -f "${toolkit_config}"
+        sed -i 's|/usr/bin/nvidia-ctk|/usr/local/bin/nvidia-ctk|g; s|/usr/bin/nvidia-cdi-hook|/usr/local/bin/nvidia-cdi-hook|g; s|/usr/bin/nvidia-container-runtime-hook|/usr/local/bin/nvidia-container-runtime-hook|g; s|DefaultExecutableDir = "/usr/bin"|DefaultExecutableDir = "/usr/local/bin"|g' "${toolkit_config}"
+        grep -Fq 'nvidiaCTKDefaultFilePath     = "/usr/local/bin/nvidia-ctk"' "${toolkit_config}"
+        grep -Fq 'nvidiaCDIHookDefaultFilePath = "/usr/local/bin/nvidia-cdi-hook"' "${toolkit_config}"
+        grep -Fq 'nvidiaContainerRuntimeHookDefaultPath = "/usr/local/bin/nvidia-container-runtime-hook"' "${toolkit_config}"
+        grep -Fq 'DefaultExecutableDir = "/usr/local/bin"' "${toolkit_config}"
         # Source archives intentionally omit .git. NVIDIA's makefiles still call
         # git rev-parse while evaluating dependencies, so seed deterministic local
         # repositories before invoking make (the release revision is passed below).
@@ -138,23 +147,8 @@ steps:
         test -x /rootfs/usr/local/bin/nvidia-ctk
         test -x /rootfs/usr/local/bin/nvidia-cdi-hook
         test -x /rootfs/usr/local/bin/nvidia-container-cli
-        # NVIDIA Container Toolkit v1.17.8 defaults to /usr/bin for
-        # nvidia-container-runtime-hook, nvidia-ctk, and nvidia-cdi-hook.
-        # Talos extension binaries live under /usr/local/bin, so provide the
-        # upstream-compatible paths expected by the runtime and its hooks.
-        mkdir -p /rootfs/usr/bin
-        for toolkit_binary in nvidia-container-runtime nvidia-container-runtime-hook nvidia-ctk nvidia-cdi-hook; do
-          ln -sfn "/usr/local/bin/${toolkit_binary}" "/rootfs/usr/bin/${toolkit_binary}"
-        done
-        # Talos does not allow /usr/bin/nvidia-container-cli in an extension.
-        # Configure the NVIDIA runtime hook to invoke the CLI from the
-        # extension's permitted /usr/local/bin location instead of relying on
-        # its upstream /usr/bin default.
-        mkdir -p /rootfs/etc/nvidia-container-runtime
-        cat > /rootfs/etc/nvidia-container-runtime/config.toml <<'EOF'
-        [nvidia-container-cli]
-          path = "/usr/local/bin/nvidia-container-cli"
-        EOF
+        # Keep all extension-owned executables under /usr/local/bin; upstream
+        # defaults were patched during prepare to use this path.
         # Upstream installs the versioned SONAME file but omits the SONAME symlink
         # in DESTDIR mode when LDCONFIG is disabled (required for Talos).
         ln -sfn libnvidia-container.so.1.17.8 /rootfs/usr/local/lib/libnvidia-container.so.1
@@ -187,6 +181,7 @@ steps:
         test -x /rootfs/usr/local/bin/nvidia-cdi-hook
         test -x /rootfs/usr/local/bin/nvidia-container-cli
         test -s /rootfs/usr/local/lib/libnvidia-container.so.1
+        test ! -e /rootfs/usr/bin/nvidia-container-cli
         grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
         test ! -e /rootfs/usr/bin/nvidia-container-cli
         grep -Fq 'path = "/usr/local/bin/nvidia-container-cli"' /rootfs/etc/nvidia-container-runtime/config.toml
