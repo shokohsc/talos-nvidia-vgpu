@@ -117,7 +117,8 @@ steps:
 
         # Linux removed follow_pfn() in 6.10. The replacement
         # follow_pfnmap_start()/end() is GPL-only, so a proprietary NVIDIA
-        # module cannot call it without creating an unresolved GPL symbol.        # Match NVIDIA's compatibility fallback: report unsupported PFN
+        # module cannot call it without creating an unresolved GPL symbol.
+        # Match NVIDIA's compatibility fallback: report unsupported PFN
         # lookup rather than calling the removed API or GPL-only follow_pte().
         mlock_source="/pkg/driver/kernel/nvidia/os-mlock.c"
         test -s "$mlock_source"
@@ -236,7 +237,8 @@ steps:
           echo "=== End NVIDIA module symbol diagnostics ===" >&2
           exit 1
         fi
-    install:      - |
+    install:
+      - |
         trap 'status=$?; echo "ERROR: nvidia-vgpu-guest install failed at line ${LINENO}: ${BASH_COMMAND} (exit ${status})" >&2; exit "${status}"' ERR
         kernel_release="$(cat /src/include/config/kernel.release)"
         module_dir="/rootfs/usr/lib/modules/${kernel_release}"
@@ -355,7 +357,8 @@ steps:
         # integration or a GLVND display stack. Remove matching entries,
         # including dangling symlinks, while retaining NVML and CUDA libraries.
         for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGLX_indirect.so*' 'libGL_nvidia.so*' 'libOpenCL.so*'; do
-          find /rootfs/usr/lib -maxdepth 1 -name "$pattern" -exec rm -f {} +        done
+          find /rootfs/usr/lib -maxdepth 1 -name "$pattern" -exec rm -f {} +
+        done
         for pattern in 'libEGL_nvidia.so*' 'libGLES*_nvidia.so*' 'libGLX_nvidia.so*' 'libGLX_indirect.so*' 'libGL_nvidia.so*' 'libOpenCL.so*'; do
           if find /rootfs/usr/lib -maxdepth 1 -name "$pattern" -print -quit | grep -q .; then
             echo "Unsupported optional NVIDIA display/compute library remains: $pattern" >&2
@@ -473,7 +476,8 @@ steps:
         # Do not copy the build stage's /lib: it is musl-based and contains
         # an unversioned libstdc++.so.6 that causes nvidia-gridd to exit.
         cat > "${gridd_stage}/etc/nvidia/gridd.conf" <<'EOF'
-        # NVIDIA License System client configuration for a Talos vGPU guest.        # The service selects the correct license entitlement from the vGPU profile.
+        # NVIDIA License System client configuration for a Talos vGPU guest.
+        # The service selects the correct license entitlement from the vGPU profile.
         FeatureType=1
         EnableUI=FALSE
         EOF
@@ -592,7 +596,8 @@ steps:
         test ! -e /rootfs/usr/bin/nvidia-gridd
         test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
         test -s /rootfs/usr/local/etc/containers/nvidia-gridd.yaml
-        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-gridd-wrapper        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-dls-token-fetcher
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-gridd-wrapper
+        test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/local/bin/nvidia-dls-token-fetcher
         test -x /rootfs/usr/local/lib/containers/nvidia-gridd/usr/bin/nvidia-gridd
         test -s /rootfs/usr/local/lib/containers/nvidia-gridd/etc/nvidia/gridd.conf
         test -s /rootfs/usr/lib/udev/rules.d/60-nvidia-vgpu.rules
