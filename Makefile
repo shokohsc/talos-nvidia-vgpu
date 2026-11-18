@@ -1,7 +1,7 @@
 PLATFORM ?= linux/amd64
 TALOS_VERSION ?= v1.13.10
 NVIDIA_DRIVER_VERSION ?= 535.161.07
-NVIDIA_DRIVER_IMAGE ?= docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid
+NVIDIA_DRIVER_IMAGE ?= docker.io/shokohsc/nvidia-vgpu-driver:$(NVIDIA_DRIVER_VERSION)-grid
 PKGS_REF ?= 9b044c593c71b0ea6deb9985b7907e008b91220c
 PKGS_DIR ?= _out/pkgs
 KERNEL_IMAGE ?= ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:talos-$(TALOS_VERSION)-$(PKGS_REF)
