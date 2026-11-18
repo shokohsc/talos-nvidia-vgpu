@@ -101,8 +101,12 @@ jobs:
           stable_ref="${TOOLKIT_IMAGE}:${STABLE_TAG}"
           docker tag "$loaded_image" "$commit_ref"
           docker push "$commit_ref"
-          docker tag "$loaded_image" "$stable_ref"
-          docker push "$stable_ref"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            docker tag "$loaded_image" "$stable_ref"
+            docker push "$stable_ref"
+          else
+            echo "Skipping moving toolkit version alias outside main: $stable_ref"
+          fi
           echo "image_ref=$commit_ref" >> "$GITHUB_OUTPUT"
           {
             echo "### Published NVIDIA Container Toolkit extension"
