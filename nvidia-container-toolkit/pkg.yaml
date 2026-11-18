@@ -1,168 +1,48 @@
 name: nvidia-container-toolkit
 variant: alpine
 shell: /bin/bash
-install:
-  - build-base
-  - go
-  - tar
-  - bmake
-  - rpcsvc-proto
-  - libtirpc-dev
-  - libcap-dev
-  - libseccomp-dev
-  - elfutils-dev
-  - pkgconf
-  - coreutils
-  - curl
-  - git
-  # Alpine/musl does not provide glibc's argp.h; libnvidia-container's CLI needs it.
-  - argp-standalone
 dependencies:
   # Keep the validator without merging the Talos tools rootfs over Alpine.
   - image: ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0
     from: /
     to: /
+  # The toolkit is built against glibc because the proprietary GRID driver
+  # libraries (NVML/CUDA) are glibc-linked. Keep this runtime private to the
+  # extension under /usr/local; never replace Talos' musl libc.
+  - image: ghcr.io/siderolabs/glibc:2.44
+    from: /rootfs/usr/local
+    to: /usr/local
 steps:
   - prepare:
       - |
         set -euxo pipefail
-        # The runner archives upstream Git trees before bldr sees the package.
-        # This prevents bldr from interpreting vendored Go *.tmpl fixtures as
-        # Talos package templates.
-        test -s /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz
-        test -s /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
-        test -s /pkg/sources-archive/nvidia-modprobe-550.54.14.tar.gz
-        mkdir -p /tmp/libnvidia-container /tmp/nvidia-container-toolkit /tmp/nvidia-modprobe
-        tar -xzf /pkg/sources-archive/libnvidia-container-v1.17.8.tar.gz -C /tmp/libnvidia-container
-        tar -xzf /pkg/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz -C /tmp/nvidia-container-toolkit
-        tar -xzf /pkg/sources-archive/nvidia-modprobe-550.54.14.tar.gz -C /tmp/nvidia-modprobe
-        # Talos extensions may not add files under /usr/bin. Patch upstream
-        # defaults to the extension-approved /usr/local/bin location.
-        toolkit_config=/tmp/nvidia-container-toolkit/internal/config/config.go
-        test -f "${toolkit_config}"
-        sed -i 's|/usr/bin/nvidia-ctk|/usr/local/bin/nvidia-ctk|g; s|/usr/bin/nvidia-cdi-hook|/usr/local/bin/nvidia-cdi-hook|g; s|/usr/bin/nvidia-container-runtime-hook|/usr/local/bin/nvidia-container-runtime-hook|g; s|DefaultExecutableDir = "/usr/bin"|DefaultExecutableDir = "/usr/local/bin"|g' "${toolkit_config}"
-        grep -Fq 'nvidiaCTKDefaultFilePath     = "/usr/local/bin/nvidia-ctk"' "${toolkit_config}"
-        grep -Fq 'nvidiaCDIHookDefaultFilePath = "/usr/local/bin/nvidia-cdi-hook"' "${toolkit_config}"
-        grep -Fq 'nvidiaContainerRuntimeHookDefaultPath = "/usr/local/bin/nvidia-container-runtime-hook"' "${toolkit_config}"
-        grep -Fq 'DefaultExecutableDir = "/usr/local/bin"' "${toolkit_config}"
-        # Source archives intentionally omit .git. NVIDIA's makefiles still call
-        # git rev-parse while evaluating dependencies, so seed deterministic local
-        # repositories before invoking make (the release revision is passed below).
-        for source_dir in /tmp/libnvidia-container /tmp/nvidia-container-toolkit; do
-          git -C "${source_dir}" init
-          git -C "${source_dir}" -c user.name='Talos NVIDIA build' -c user.email='build@localhost' commit --allow-empty -m 'Seed source archive revision'
-        done
-        # NVIDIA libnvidia-container assumes glibc headers/APIs in two places.
-        # Keep the extension musl-native by applying small, auditable compatibility fixes.
-        cat > /tmp/libnvidia-container-musl.patch <<'PATCH'
-        --- a/src/nvc.c
-        +++ b/src/nvc.c
-        @@ -5,3 +5,5 @@
-        -#include <gnu/lib-names.h>
-        +#if defined(__GLIBC__)
-        +#include <gnu/lib-names.h>
-        +#endif
-         
-         #include <sys/types.h>
-        @@ -24,1 +25,5 @@
-        -const char interpreter[] __attribute__((section(".interp"))) = LIB_DIR "/" LD_SO;
-        +#if defined(__GLIBC__)
-        +const char interpreter[] __attribute__((section(".interp"))) = LIB_DIR "/" LD_SO;
-        +#else
-        +const char interpreter[] __attribute__((section(".interp"))) = "/lib/ld-musl-x86_64.so.1";
-        +#endif
-        --- a/src/rpc.h
-        +++ b/src/rpc.h
-        @@ -19,3 +19,5 @@
-         #include <sys/types.h>
-        +
-        +#include <signal.h>
-         
-         #include <rpc/rpc.h>
-        --- a/src/nvc_ldcache.c
-        +++ b/src/nvc_ldcache.c
-        @@ -17,2 +17,4 @@
-         #include <sys/types.h>
-         #include <sys/wait.h>
-        +
-        +#include <linux/sched.h>
-        @@ -110,2 +111,2 @@
-        -        if (unshare(CLONE_NEWNS) < 0)
-        +        if (syscall(SYS_unshare, CLONE_NEWNS) < 0)
-                     goto fail;
-        --- a/src/nvc_info.c
-        +++ b/src/nvc_info.c
-        @@ -7,3 +7,4 @@
-         #include <errno.h>
-         #include <limits.h>
-        +#include <libgen.h>
-         #include <nvidia-modprobe-utils.h>
-        PATCH
-        sed -i 's/^  //' /tmp/libnvidia-container-musl.patch
-        patch -d /tmp/libnvidia-container -p1 < /tmp/libnvidia-container-musl.patch
-        # go-nvml references glibc's RTLD_DEEPBIND from dlfcn.h. musl does not
-        # define it; deep binding is a glibc-specific loader behavior, so use
-        # a zero-valued compatibility definition on musl while preserving the
-        # platform-provided value on glibc. Insert directly rather than using
-        # a hand-maintained unified diff (whose hunk counts are easy to stale).
-        toolkit_nvml_source=/tmp/nvidia-container-toolkit/vendor/github.com/NVIDIA/go-nvml/pkg/dl/dl_linux.go
-        awk '
-          /#include <stdlib.h>/ {
-            print
-            print "// #ifndef RTLD_DEEPBIND"
-            print "// #define RTLD_DEEPBIND 0"
-            print "// #endif"
-            next
-          }
-          { print }
-        ' "${toolkit_nvml_source}" > "${toolkit_nvml_source}.tmp"
-        mv "${toolkit_nvml_source}.tmp" "${toolkit_nvml_source}"
-        grep -Fq '// #define RTLD_DEEPBIND 0' "${toolkit_nvml_source}"
-        # libnvidia-container's makefile downloads this pinned dependency itself.
-        # Pre-populate its expected source directory and stamp to keep builds offline.
-        mkdir -p /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8
-        cp -a /tmp/nvidia-modprobe/modprobe-utils /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8/
-        patch -d /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8 -p1 < /tmp/libnvidia-container/mk/nvidia-modprobe.patch
-        touch /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8/.download_stamp
-        test -f /tmp/libnvidia-container/Makefile
-        test -f /tmp/nvidia-container-toolkit/Makefile
-    build:
-      - |
-        set -euxo pipefail
-        cd /tmp/libnvidia-container
-        # Build and install the pinned nvidia-modprobe-utils static archive into deps/usr/local/lib.
-        # libnvidia-container links this archive when producing libnvidia-container.so.
-        make deps MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_LIBELF=yes
-        make -j"$(nproc)" MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_NVCGO=yes WITH_LIBELF=yes WITH_TIRPC=no WITH_SECCOMP=yes CPPFLAGS="-D_GNU_SOURCE -I/usr/include/tirpc" LDLIBS="-ltirpc -largp"
-        make install MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_LIBELF=yes LDCONFIG=true DESTDIR=/rootfs prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc
-        cd /tmp/nvidia-container-toolkit
-        make cmds
+        test -x /pkg/prebuilt/usr/local/bin/nvidia-container-runtime
+        test -x /pkg/prebuilt/usr/local/bin/nvidia-container-runtime-hook
+        test -x /pkg/prebuilt/usr/local/bin/nvidia-container-cli
+        test -x /pkg/prebuilt/usr/local/bin/nvidia-ctk
+        test -x /pkg/prebuilt/usr/local/bin/nvidia-cdi-hook
+        test -s /pkg/prebuilt/usr/local/lib/libnvidia-container.so.1.17.8
+        test -s /usr/local/lib/libc.so.6
+        test -x /usr/local/lib/ld-linux-x86-64.so.2
     install:
       - |
         set -euxo pipefail
-        mkdir -p /rootfs/usr/local/bin /rootfs/usr/local/lib /rootfs/usr/local/share/licenses/nvidia-container-toolkit /rootfs/etc/cri/conf.d
-        find /tmp/nvidia-container-toolkit -maxdepth 1 -type f -executable -exec install -m 0755 {} /rootfs/usr/local/bin/ \;
-        test -x /rootfs/usr/local/bin/nvidia-container-runtime
-        test -x /rootfs/usr/local/bin/nvidia-container-runtime-hook
-        test -x /rootfs/usr/local/bin/nvidia-ctk
-        test -x /rootfs/usr/local/bin/nvidia-cdi-hook
-        test -x /rootfs/usr/local/bin/nvidia-container-cli
-        # Keep all extension-owned executables under /usr/local/bin; upstream
-        # defaults were patched during prepare to use this path.
-        # Upstream installs the versioned SONAME file but omits the SONAME symlink
-        # in DESTDIR mode when LDCONFIG is disabled (required for Talos).
-        ln -sfn libnvidia-container.so.1.17.8 /rootfs/usr/local/lib/libnvidia-container.so.1
-        ln -sfn libnvidia-container.so.1 /rootfs/usr/local/lib/libnvidia-container.so
-        ln -sfn libnvidia-container-go.so.1.17.8 /rootfs/usr/local/lib/libnvidia-container-go.so.1
-        ln -sfn libnvidia-container-go.so.1 /rootfs/usr/local/lib/libnvidia-container-go.so
-        test -s /rootfs/usr/local/lib/libnvidia-container.so.1
-        for runtime_library in libcap.so.2 libseccomp.so.2 libelf.so.1 libtirpc.so.3; do
-          library_path="$(find /lib /usr/lib -name "${runtime_library}" -print -quit)"
-          test -n "${library_path}"
-          install -D -m 0755 "${library_path}" "/rootfs/usr/local/lib/${runtime_library}"
-        done
-        cp /tmp/libnvidia-container/LICENSE /rootfs/usr/local/share/licenses/nvidia-container-toolkit/
-        cp /tmp/nvidia-container-toolkit/LICENSE /rootfs/usr/local/share/licenses/nvidia-container-toolkit/ 2>/dev/null || true
+        mkdir -p /rootfs/usr/local/bin /rootfs/usr/local/lib \
+          /rootfs/usr/local/share/licenses/nvidia-container-toolkit \
+          /rootfs/etc/cri/conf.d
+        cp -a /pkg/prebuilt/usr/local/bin/. /rootfs/usr/local/bin/
+        cp -a /pkg/prebuilt/usr/local/lib/. /rootfs/usr/local/lib/
+        # Use the Talos-compatible glibc runtime supplied by siderolabs/glibc.
+        # The Debian builder's glibc is intentionally not copied into the image;
+        # this runtime is newer and remains isolated under /usr/local/lib.
+        cp -a /usr/local/lib/ld-linux-x86-64.so.2 /rootfs/usr/local/lib/
+        cp -a /usr/local/lib/libc.so.6 /rootfs/usr/local/lib/
+        cp -a /usr/local/lib/libm.so.6 /rootfs/usr/local/lib/ 2>/dev/null || true
+        cp -a /usr/local/lib/libpthread.so.0 /rootfs/usr/local/lib/ 2>/dev/null || true
+        cp -a /usr/local/lib/libdl.so.2 /rootfs/usr/local/lib/ 2>/dev/null || true
+        cp -a /usr/local/lib/librt.so.1 /rootfs/usr/local/lib/ 2>/dev/null || true
+        cp -a /pkg/prebuilt/usr/local/share/licenses/nvidia-container-toolkit/. \
+          /rootfs/usr/local/share/licenses/nvidia-container-toolkit/
         cat > /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part <<'EOF'
         [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia]
           privileged_without_host_devices = false
@@ -175,16 +55,32 @@ steps:
     test:
       - |
         set -euxo pipefail
-        test -x /rootfs/usr/local/bin/nvidia-container-runtime
-        test -x /rootfs/usr/local/bin/nvidia-container-runtime-hook
-        test -x /rootfs/usr/local/bin/nvidia-ctk
-        test -x /rootfs/usr/local/bin/nvidia-cdi-hook
-        test -x /rootfs/usr/local/bin/nvidia-container-cli
-        test -s /rootfs/usr/local/lib/libnvidia-container.so.1
-        test ! -e /rootfs/usr/bin/nvidia-container-cli
-        grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
-        # The runtime config file is generated by nvidia-ctk at node setup
-        # time; this extension only ships the containerd runtime fragment.
+        for binary in nvidia-container-runtime nvidia-container-runtime-hook \
+          nvidia-container-cli nvidia-ctk nvidia-cdi-hook; do
+          test -x "/rootfs/usr/local/bin/${binary}"
+          if grep -aFq 'libc.musl-x86_64.so.1' "/rootfs/usr/local/bin/${binary}"; then
+            echo "${binary} is still linked to musl; expected a glibc build" >&2
+            exit 1
+          fi
+        done
+        test -s /rootfs/usr/local/lib/libnvidia-container.so.1.17.8
+        test -L /rootfs/usr/local/lib/libnvidia-container.so.1
+        test -L /rootfs/usr/local/lib/libnvidia-container-go.so.1
+        test -x /rootfs/usr/local/lib/ld-linux-x86-64.so.2
+        test -s /rootfs/usr/local/lib/libc.so.6
+        # Exercise the actual packaged glibc loader and resolve all direct
+        # dependencies before the extension is emitted.
+        loader=/rootfs/usr/local/lib/ld-linux-x86-64.so.2
+        runtime=/rootfs/usr/local/bin/nvidia-container-runtime
+        dependencies="$("${loader}" --library-path /rootfs/usr/local/lib --list "${runtime}" 2>&1)"
+        printf '%s\\n' "${dependencies}"
+        if grep -Fq 'not found' <<< "${dependencies}"; then
+          echo "Unresolved NVIDIA Container Toolkit runtime dependency" >&2
+          exit 1
+        fi
+        "${loader}" --library-path /rootfs/usr/local/lib "${runtime}" --version
+        grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' \
+          /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
         mkdir -p /extensions-validator-rootfs
         cp -a /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
