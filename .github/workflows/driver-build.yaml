@@ -30,6 +30,7 @@ jobs:
     timeout-minutes: 360
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         driver-version: ["535.161.07", "535.309.01"]
     env:
@@ -149,10 +150,14 @@ jobs:
           docker image inspect "$loaded_image" >/dev/null
           version_ref="$EXTENSION_IMAGE:$DRIVER_VERSION-talos-$TALOS_VERSION"
           commit_ref="$EXTENSION_IMAGE:$DRIVER_VERSION-$(git rev-parse --short=7 "$GITHUB_SHA")"
-          docker tag "$loaded_image" "$version_ref"
           docker tag "$loaded_image" "$commit_ref"
-          docker push "$version_ref"
           docker push "$commit_ref"
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            docker tag "$loaded_image" "$version_ref"
+            docker push "$version_ref"
+          else
+            echo "Skipping moving version alias outside main: $version_ref"
+          fi
           {
             echo "### Published GRID guest/GRIDD extension"
             echo "- Driver: $DRIVER_VERSION"
