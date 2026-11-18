@@ -52,7 +52,7 @@ jobs:
           test -s "$INSTALLER_TAR"
           load_output="$(docker load --input "$INSTALLER_TAR")"
           printf '%s\\n' "$load_output"
-          loaded_image="$(printf '%s\\n' "$load_output" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+          loaded_image="$(printf '%s\\n' "$load_output" | sed -n -e 's/^Loaded image: //p' -e 's/^Loaded image ID: //p' | tail -n 1)"
           test -n "$loaded_image" || {
             echo "docker load did not return an installer image tag" >&2
             exit 1
