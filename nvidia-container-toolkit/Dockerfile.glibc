@@ -56,7 +56,7 @@ RUN set -eux; \
       if grep -q 'not found' /tmp/ldd.txt; then cat /tmp/ldd.txt >&2; exit 1; fi; \
       awk '/=> \/.*\(/ { print $3 } /^\// { print $1 }' /tmp/ldd.txt | sort -u | while read -r dependency; do \
         case "${dependency}" in \
-          */libc.so.6|*/libm.so.6|*/libpthread.so.0|*/libdl.so.2|*/librt.so.1|*/ld-linux-x86-64.so.2) continue ;; \
+          /out/usr/local/lib/*|*/libc.so.6|*/libm.so.6|*/libpthread.so.0|*/libdl.so.2|*/librt.so.1|*/ld-linux-x86-64.so.2) continue ;; \
         esac; \
         install -m 0755 "${dependency}" "/out/usr/local/lib/$(basename "${dependency}")"; \
       done; \
