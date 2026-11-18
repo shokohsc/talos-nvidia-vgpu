@@ -143,9 +143,18 @@ steps:
         # Talos extension binaries live under /usr/local/bin, so provide the
         # upstream-compatible paths expected by the runtime and its hooks.
         mkdir -p /rootfs/usr/bin
-        for toolkit_binary in nvidia-container-runtime nvidia-container-runtime-hook nvidia-ctk nvidia-cdi-hook nvidia-container-cli; do
+        for toolkit_binary in nvidia-container-runtime nvidia-container-runtime-hook nvidia-ctk nvidia-cdi-hook; do
           ln -sfn "/usr/local/bin/${toolkit_binary}" "/rootfs/usr/bin/${toolkit_binary}"
         done
+        # Talos does not allow /usr/bin/nvidia-container-cli in an extension.
+        # Configure the NVIDIA runtime hook to invoke the CLI from the
+        # extension's permitted /usr/local/bin location instead of relying on
+        # its upstream /usr/bin default.
+        mkdir -p /rootfs/etc/nvidia-container-runtime
+        cat > /rootfs/etc/nvidia-container-runtime/config.toml <<'EOF'
+        [nvidia-container-cli]
+          path = "/usr/local/bin/nvidia-container-cli"
+        EOF
         # Upstream installs the versioned SONAME file but omits the SONAME symlink
         # in DESTDIR mode when LDCONFIG is disabled (required for Talos).
         ln -sfn libnvidia-container.so.1.17.8 /rootfs/usr/local/lib/libnvidia-container.so.1
@@ -179,6 +188,8 @@ steps:
         test -x /rootfs/usr/local/bin/nvidia-container-cli
         test -s /rootfs/usr/local/lib/libnvidia-container.so.1
         grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
+        test ! -e /rootfs/usr/bin/nvidia-container-cli
+        grep -Fq 'path = "/usr/local/bin/nvidia-container-cli"' /rootfs/etc/nvidia-container-runtime/config.toml
         mkdir -p /extensions-validator-rootfs
         cp -a /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
