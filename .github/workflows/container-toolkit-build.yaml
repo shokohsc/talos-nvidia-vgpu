@@ -90,7 +90,7 @@ jobs:
           printf '%s\n' "$load_output"
           # BuildKit's Docker exporter may produce an image archive without
           # RepoTags. In that case docker load reports an image ID, not a tag.
-          loaded_image="$(printf '%s\n' "$load_output" | sed -n -E 's/^Loaded image: (.+)$/\\1/p' | tail -n 1)"
+          loaded_image="$(printf '%s\n' "$load_output" | awk '/^Loaded image(:| ID:)/ {print $NF}' | tail -n 1)"
           if [ -z "$loaded_image" ]; then
             echo "ERROR: docker load did not report a loaded image reference or ID" >&2
             exit 1
