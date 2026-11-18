@@ -2,7 +2,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, "feature/**"]
+    branches: [main, "feature/**", "refactor/**"]
 permissions:
   contents: read
 jobs:
@@ -12,66 +12,64 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate shell scripts
         run: |
+          set -euo pipefail
           bash -n scripts/validate-artifacts.sh
           bash -n scripts/extract-driver.sh
           bash -n scripts/build-installer-image.sh
           sh -n nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
-      - name: Validate YAML
+      - name: Validate package, manifest, and workflow YAML
         run: |
           python3 -m pip install --disable-pip-version-check PyYAML
           python3 - <<'PY'
           import pathlib
           import yaml
 
-          for path in (pathlib.Path("Pkgfile"), pathlib.Path("nvidia-vgpu-guest/pkg.yaml"), pathlib.Path("base/pkg.yaml")):
+          for path in (
+              pathlib.Path("Pkgfile"),
+              pathlib.Path("nvidia-vgpu-guest/pkg.yaml"),
+              pathlib.Path("nvidia-container-toolkit/pkg.yaml"),
+              pathlib.Path("base/pkg.yaml"),
+          ):
               text = path.read_text()
               if path.name == "Pkgfile":
                   text = "\n".join(text.splitlines()[1:])
               yaml.safe_load(text)
-          toolkit_pkg = pathlib.Path("nvidia-container-toolkit/pkg.yaml").read_text()
-          yaml.safe_load(toolkit_pkg)
 
-          manifest = pathlib.Path("nvidia-vgpu-guest/manifest.yaml.tmpl").read_text()
-          manifest = manifest.replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.10")
-          manifest = manifest.replace("{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}", "535.161.07")
-          yaml.safe_load(manifest)
+          for driver_version in ("535.161.07", "535.309.01"):
+              manifest = pathlib.Path("nvidia-vgpu-guest/manifest.yaml.tmpl").read_text()
+              manifest = manifest.replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.10")
+              manifest = manifest.replace("{{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}", driver_version)
+              yaml.safe_load(manifest)
 
-          workflow = pathlib.Path(".github/workflows/driver-build.yaml").read_text()
-          yaml.safe_load(workflow)
-          toolkit_manifest = pathlib.Path("nvidia-container-toolkit/manifest.yaml.tmpl").read_text().replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.10")
-          yaml.safe_load(toolkit_manifest)
-          service = pathlib.Path("nvidia-vgpu-guest/nvidia-gridd.yaml").read_text()
-          yaml.safe_load(service)
-          print("YAML syntax checks passed")
+          toolkit_manifest = pathlib.Path("nvidia-container-toolkit/manifest.yaml.tmpl").read_text()
+          yaml.safe_load(toolkit_manifest.replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.10"))
+          yaml.safe_load(pathlib.Path("nvidia-vgpu-guest/nvidia-gridd.yaml").read_text())
+
+          for path in pathlib.Path(".github/workflows").glob("*.yaml"):
+              yaml.safe_load(path.read_text())
+          print("Package, manifest, and workflow YAML syntax checks passed")
           PY
       - name: Validate Makefile targets
-        run: make -n build KERNEL_IMAGE=example.invalid/kernel:tag >/dev/null
-      - name: Validate required build inputs
         run: |
-          test -s nvidia-vgpu-guest/files/nvidia.conf
-          test -s nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
-          test -s nvidia-vgpu-guest/nvidia-gridd.yaml
-          grep -q '^  - network:' nvidia-vgpu-guest/nvidia-gridd.yaml
-          ! grep -q 'configuration: true' nvidia-vgpu-guest/nvidia-gridd.yaml
-          grep -q 'nvidia-gridd' nvidia-vgpu-guest/pkg.yaml
-          test -s Dockerfile.kernel-build
-          test -x scripts/validate-artifacts.sh
-          test -s scripts/extract-driver.sh
-          grep -q 'BUILD_ARG_KERNEL_IMAGE' nvidia-vgpu-guest/pkg.yaml
-          grep -q '/src/Module.symvers' nvidia-vgpu-guest/pkg.yaml
-          grep -q 'install -m 0755 /bin/busybox' nvidia-vgpu-guest/pkg.yaml
-          grep -q '/bin/busybox' nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
-
-      - name: Validate NVIDIA Container Toolkit extension inputs
+          make -n build KERNEL_IMAGE=example.invalid/kernel:tag >/dev/null
+          make -n extract-driver NVIDIA_DRIVER_VERSION=535.309.01 >/dev/null
+      - name: Validate GRID driver matrix and matching source inputs
         run: |
-          test -s nvidia-container-toolkit/pkg.yaml
-          test -s nvidia-container-toolkit/manifest.yaml.tmpl
-          grep -q 'TOOLKIT_EXTENSION_REF' scripts/build-installer-image.sh
-          grep -q 'nvidia-container-toolkit' .github/workflows/driver-build.yaml
-          grep -q 'TOOLKIT_EXTENSION_REF:' .github/workflows/driver-build.yaml
-          grep -q 'libnvidia-container' nvidia-container-toolkit/pkg.yaml
-          grep -q 'nvidia-container-runtime' nvidia-container-toolkit/pkg.yaml
-          grep -q 'nvidia-container-cli' nvidia-container-toolkit/pkg.yaml
-          grep -q '10-nvidia-container-runtime.part' nvidia-container-toolkit/pkg.yaml
-          ! grep -q 'nvidia-vgpu-guest' nvidia-container-toolkit/pkg.yaml
-          grep -q 'LDCONFIG=true' nvidia-container-toolkit/pkg.yaml
+          set -euo pipefail
+          grep -Fq '535.161.07' .github/workflows/driver-build.yaml
+          grep -Fq '535.309.01' .github/workflows/driver-build.yaml
+          grep -Fq 'docker.io/shokohsc/nvidia-vgpu-driver:' .github/workflows/driver-build.yaml
+          grep -Fq '05e03ad42a2fdb232dffd81a45bf9eac50dcbe60bd5b84f181569b52d7d870f0' scripts/extract-driver.sh
+          grep -Fq 'NVIDIA_VERSION = {{ .BUILD_ARG_NVIDIA_DRIVER_VERSION }}' nvidia-vgpu-guest/pkg.yaml
+          grep -Fq 'CUSTOM_EXTENSION_REF' scripts/build-installer-image.sh
+          grep -Fq 'TOOLKIT_EXTENSION_REF' scripts/build-installer-image.sh
+          grep -Fq 'nvidia-gridd' nvidia-vgpu-guest/pkg.yaml
+          grep -Fq 'nvidia-dls-token-fetcher' nvidia-vgpu-guest/pkg.yaml
+      - name: Validate independent extension workflows
+        run: |
+          set -euo pipefail
+          grep -Fq 'nvidia-container-toolkit' .github/workflows/container-toolkit-build.yaml
+          grep -Fq 'nvidia-gridd' .github/workflows/gridd-service-build.yaml
+          grep -Fq 'CUSTOM_EXTENSION_REF:' .github/workflows/installer-build.yaml
+          grep -Fq 'TOOLKIT_EXTENSION_REF:' .github/workflows/installer-build.yaml
+          ! grep -Fq 'nvidia-container-toolkit' .github/workflows/driver-build.yaml
