@@ -144,8 +144,8 @@ jobs:
           set -euo pipefail
           test -s "$EXTENSION_TAR"
           load_output="$(docker load --input "$EXTENSION_TAR")"
-          printf '%s\\n' "$load_output"
-          loaded_image="$(printf '%s\\n' "$load_output" | sed -n -e 's/^Loaded image: //p' -e 's/^Loaded image ID: //p' | tail -n 1)"
+          printf '%s\n' "$load_output"
+          loaded_image="$(printf '%s\n' "$load_output" | sed -n -e 's/^Loaded image: //p' -e 's/^Loaded image ID: //p' | tail -n 1)"
           test -n "$loaded_image"
           docker image inspect "$loaded_image" >/dev/null
           version_ref="$EXTENSION_IMAGE:$DRIVER_VERSION-talos-$TALOS_VERSION"
