@@ -88,11 +88,14 @@ jobs:
           test -s "$TOOLKIT_TAR"
           load_output="$(docker load --input "$TOOLKIT_TAR")"
           printf '%s\n' "$load_output"
-          loaded_image="$(printf '%s\n' "$load_output" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+          # BuildKit's Docker exporter may produce an image archive without
+          # RepoTags. In that case docker load reports an image ID, not a tag.
+          loaded_image="$(printf '%s\n' "$load_output" | sed -n -E 's/^Loaded image: (.+)$/\\1/p' | tail -n 1)"
           if [ -z "$loaded_image" ]; then
-            echo "ERROR: docker load did not report a loaded image tag" >&2
+            echo "ERROR: docker load did not report a loaded image reference or ID" >&2
             exit 1
           fi
+          docker image inspect "$loaded_image" >/dev/null
           short_sha="$(git rev-parse --short=7 "$GITHUB_SHA")"
           commit_ref="${TOOLKIT_IMAGE}:${short_sha}"
           stable_ref="${TOOLKIT_IMAGE}:${STABLE_TAG}"
