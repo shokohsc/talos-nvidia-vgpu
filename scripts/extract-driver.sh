@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-IMAGE="${NVIDIA_DRIVER_IMAGE:-docker.io/shokohsc/nvidia-vgpu-driver:535.161.07-grid}"
+IMAGE="${NVIDIA_DRIVER_IMAGE:-docker.io/shokohsc/nvidia-vgpu-driver:${NVIDIA_DRIVER_VERSION:-535.161.07}-grid}"
 EXPECTED_VERSION="${NVIDIA_DRIVER_VERSION:-535.161.07}"
 WORKDIR="${WORKDIR:-$PWD/_work/nvidia-vgpu}"
 INSTALLER_DIR="$WORKDIR/installer"
@@ -61,8 +61,19 @@ echo "Extracting GRID installer payload directly to $EXTRACTED"
 # nvidia-modprobe is published by NVIDIA as a separate source archive. Pin
 # the exact GRID driver version and verify NVIDIA's published SHA-256 before
 # placing the source alongside the extracted GRID payload for the extension build.
-NVIDIA_MODPROBE_VERSION="535.161.07"
-NVIDIA_MODPROBE_SHA256="8f20b547ca6cdf51ef6bfde161d3c0438c6d9f16efe7f349134e6a686c2f4377"
+NVIDIA_MODPROBE_VERSION="$EXPECTED_VERSION"
+case "$NVIDIA_MODPROBE_VERSION" in
+  535.161.07)
+    NVIDIA_MODPROBE_SHA256="8f20b547ca6cdf51ef6bfde161d3c0438c6d9f16efe7f349134e6a686c2f4377"
+    ;;
+  535.309.01)
+    NVIDIA_MODPROBE_SHA256="05e03ad42a2fdb232dffd81a45bf9eac50dcbe60bd5b84f181569b52d7d870f0"
+    ;;
+  *)
+    echo "Unsupported GRID version for pinned nvidia-modprobe source: $NVIDIA_MODPROBE_VERSION" >&2
+    exit 1
+    ;;
+esac
 NVIDIA_MODPROBE_ARCHIVE="nvidia-modprobe-${NVIDIA_MODPROBE_VERSION}.tar.bz2"
 NVIDIA_MODPROBE_URL="https://download.nvidia.com/XFree86/nvidia-modprobe/${NVIDIA_MODPROBE_ARCHIVE}"
 NVIDIA_MODPROBE_DIR="$EXTRACTED/nvidia-modprobe-src"
@@ -81,8 +92,7 @@ modprobe_source_dir="${modprobe_makefile%/Makefile}"
 if [[ "$modprobe_source_dir" != "$NVIDIA_MODPROBE_DIR" ]]; then
   cp -a "$modprobe_source_dir/." "$NVIDIA_MODPROBE_DIR/"
 fi
-grep -Eq '^NVIDIA_VERSION[[:space:]]*=[[:space:]]*535\.161\.07([[:space:]]|$)' \
-  "$NVIDIA_MODPROBE_DIR/version.mk" || {
+grep -Fq "NVIDIA_VERSION = ${NVIDIA_MODPROBE_VERSION}" "$NVIDIA_MODPROBE_DIR/version.mk" || {
   echo "nvidia-modprobe source version does not match GRID $NVIDIA_MODPROBE_VERSION" >&2
   exit 1
 }

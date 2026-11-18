@@ -9,12 +9,10 @@
 # Optional env:
   # TOOLKIT_EXTENSION_REF  published nvidia-container-toolkit extension image reference
 #   TALOS_VERSION         default v1.13.10
-#   EXTENSION_IMAGE       vGPU guest extension image tar (docker-save format),
-#                         default _out/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
+#   EXTENSION_IMAGE       optional vGPU guest extension image tar (docker-save format)
 #   OUT_DIR               default _out
-#   CUSTOM_EXTENSION_REF  if set, push the extension tar with crane and use
-#                         imageRef (recommended for CI); otherwise use a
-#                         locally mounted docker-save tarballPath
+#   CUSTOM_EXTENSION_REF  already-published vGPU guest extension imageRef;
+#                         when set, no local driver tar is required
 #   INSTALLER_IMAGE       if set, push the built installer tar here,
 #                         e.g. ghcr.io/<user>/metal-installer:v1.13.10
 set -euo pipefail
@@ -50,19 +48,20 @@ OFFICIAL_EXTENSIONS=(
   uinput
 )
 
-test -s "$EXTENSION_IMAGE" || { echo "ERROR: $EXTENSION_IMAGE missing; run 'make build' first" >&2; exit 2; }
 mkdir -p "$OUT_DIR"
 OUT_DIR_ABS="$(cd "$OUT_DIR" && pwd)"
 
 if [ -n "${CUSTOM_EXTENSION_REF:-}" ]; then
-  # Publish the custom extension first; the imager will resolve it through
-  # the same GHCR credentials mounted below.
-  crane push "$EXTENSION_IMAGE" "$CUSTOM_EXTENSION_REF"
+  # The driver workflow publishes each versioned guest extension to GHCR.
+  # Consume that immutable/versioned reference directly; do not republish it.
   custom_ext="    - imageRef: ${CUSTOM_EXTENSION_REF}"
+  EXTENSION_IMAGE_ABS=""
 else
-  # tarballPath expects a docker-save tarball. Mount the actual file only in
-  # this fallback mode; mounting a file at a path that already exists as a
-  # directory in the imager image can otherwise produce a directory mount.
+  test -s "$EXTENSION_IMAGE" || {
+    echo "ERROR: set CUSTOM_EXTENSION_REF or provide EXTENSION_IMAGE" >&2
+    exit 2
+  }
+  # tarballPath expects a docker-save tarball. Mount only in this fallback mode.
   EXTENSION_IMAGE_ABS="$(cd "$(dirname "$EXTENSION_IMAGE")" && pwd)/$(basename "$EXTENSION_IMAGE")"
   custom_ext="    - tarballPath: /extension/ext.tar"
 fi
