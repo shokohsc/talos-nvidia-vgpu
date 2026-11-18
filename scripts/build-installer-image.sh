@@ -7,8 +7,9 @@
 # Talos docs).
 #
 # Optional env:
+  # TOOLKIT_EXTENSION_REF  published nvidia-container-toolkit extension image reference
 #   TALOS_VERSION         default v1.13.10
-#   EXTENSION_IMAGE       nvidia extension image tar (docker-save format),
+#   EXTENSION_IMAGE       vGPU guest extension image tar (docker-save format),
 #                         default _out/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
 #   OUT_DIR               default _out
 #   CUSTOM_EXTENSION_REF  if set, push the extension tar with crane and use
@@ -31,6 +32,7 @@ if ! command -v crane >/dev/null 2>&1; then
 fi
 
 TALOS_VERSION="${TALOS_VERSION:-v1.13.10}"
+TOOLKIT_EXTENSION_REF="${TOOLKIT_EXTENSION_REF:-}"
 EXTENSION_IMAGE="${EXTENSION_IMAGE:-_out/nvidia-vgpu-535.161.07-talos-${TALOS_VERSION}.docker.tar}"
 OUT_DIR="${OUT_DIR:-_out}"
 
@@ -92,6 +94,12 @@ profile="$OUT_DIR_ABS/installer-profile.yaml"
     echo "    - imageRef: ${ref}"
   done
   echo "$custom_ext"
+  if [ -n "$TOOLKIT_EXTENSION_REF" ]; then
+    echo "    - imageRef: ${TOOLKIT_EXTENSION_REF}"
+  else
+    echo "ERROR: TOOLKIT_EXTENSION_REF is required; installer must include nvidia-container-toolkit" >&2
+    exit 2
+  fi
   echo "output:"
   echo "  kind: installer"
   echo "  outFormat: raw"
