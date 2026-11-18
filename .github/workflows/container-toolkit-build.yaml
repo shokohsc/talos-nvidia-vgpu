@@ -68,6 +68,7 @@ jobs:
             --target nvidia-container-toolkit \
             --build-arg TALOS_VERSION=v1.13.10 \
             --output "type=oci,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.17.8-talos-v1.13.10.oci.tar" \
+            --output "type=docker,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.17.8-talos-v1.13.10.docker.tar" \
             .
       - name: Upload toolkit extension OCI image
         uses: actions/upload-artifact@v4
