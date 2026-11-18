@@ -5,6 +5,7 @@ on:
       - "Pkgfile"
       - "base/**"
       - "nvidia-container-toolkit/**"
+      - "scripts/build-container-toolkit.sh"
       - ".github/workflows/container-toolkit-build.yaml"
   push:
     branches: [main, "feature/**"]
