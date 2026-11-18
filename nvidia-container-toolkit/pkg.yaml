@@ -35,12 +35,7 @@ steps:
         # Use the Talos-compatible glibc runtime supplied by siderolabs/glibc.
         # The Debian builder's glibc is intentionally not copied into the image;
         # this runtime is newer and remains isolated under /usr/local/lib.
-        cp -a /usr/local/lib/ld-linux-x86-64.so.2 /rootfs/usr/local/lib/
-        cp -a /usr/local/lib/libc.so.6 /rootfs/usr/local/lib/
-        cp -a /usr/local/lib/libm.so.6 /rootfs/usr/local/lib/ 2>/dev/null || true
-        cp -a /usr/local/lib/libpthread.so.0 /rootfs/usr/local/lib/ 2>/dev/null || true
-        cp -a /usr/local/lib/libdl.so.2 /rootfs/usr/local/lib/ 2>/dev/null || true
-        cp -a /usr/local/lib/librt.so.1 /rootfs/usr/local/lib/ 2>/dev/null || true
+        cp -a /usr/local/lib/. /rootfs/usr/local/lib/
         cp -a /pkg/prebuilt/usr/local/share/licenses/nvidia-container-toolkit/. \
           /rootfs/usr/local/share/licenses/nvidia-container-toolkit/
         cat > /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part <<'EOF'
