@@ -1,0 +1,72 @@
+name: Build Talos vGPU installers
+on:
+  workflow_run:
+    workflows: ["NVIDIA vGPU guest extension build"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+jobs:
+  build-installer:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    name: Talos v1.13.10 installer / GRID ${{ matrix.driver-version }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        driver-version: ["535.161.07", "535.309.01"]
+    env:
+      TALOS_VERSION: v1.13.10
+      TOOLKIT_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-nvidia-container-toolkit:1.17.8-talos-v1.13.10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build installer with remote guest and toolkit extensions
+        env:
+          CUSTOM_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-extension:${{ matrix.driver-version }}-talos-v1.13.10
+          OUT_DIR: ${{ runner.temp }}/installer-out
+        run: |
+          set -euo pipefail
+          bash scripts/build-installer-image.sh
+      - name: Upload versioned Talos installer archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: talos-v1.13.10-installer-grid-${{ matrix.driver-version }}
+          path: ${{ runner.temp }}/installer-out/metal-amd64-installer.tar
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish installer image to GHCR
+        env:
+          INSTALLER_TAR: ${{ runner.temp }}/installer-out/metal-amd64-installer.tar
+          INSTALLER_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-installer
+          DRIVER_VERSION: ${{ matrix.driver-version }}
+        run: |
+          set -euo pipefail
+          test -s "$INSTALLER_TAR"
+          load_output="$(docker load --input "$INSTALLER_TAR")"
+          printf '%s\\n' "$load_output"
+          loaded_image="$(printf '%s\\n' "$load_output" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+          test -n "$loaded_image" || {
+            echo "docker load did not return an installer image tag" >&2
+            exit 1
+          }
+          version_ref="$INSTALLER_IMAGE:$TALOS_VERSION-grid-$DRIVER_VERSION"
+          commit_ref="$INSTALLER_IMAGE:$DRIVER_VERSION-$(git rev-parse --short=7 "$GITHUB_SHA")"
+          docker tag "$loaded_image" "$version_ref"
+          docker tag "$loaded_image" "$commit_ref"
+          docker push "$version_ref"
+          docker push "$commit_ref"
+          {
+            echo "### Published Talos installer"
+            echo "- Driver: $DRIVER_VERSION"
+            echo "- Version reference: `$version_ref`"
+            echo "- Commit reference: `$commit_ref`"
+            echo "- Included extensions: nvidia-vgpu-guest (with nvidia-gridd), nvidia-container-toolkit, and the configured official extensions"
+          } >> "$GITHUB_STEP_SUMMARY"
