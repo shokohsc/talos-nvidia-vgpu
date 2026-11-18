@@ -12,6 +12,7 @@ on:
       - "Dockerfile.kernel-validate"
       - "Dockerfile.extensions-validator"
       - "nvidia-vgpu-guest/**"
+      - "nvidia-container-toolkit/**"
       - "scripts/extract-driver.sh"
       - "scripts/build-installer-image.sh"
       - ".github/workflows/driver-build.yaml"
@@ -27,6 +28,36 @@ jobs:
       PKGS_REF: 9b044c593c71b0ea6deb9985b7907e008b91220c
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout libnvidia-container source
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/libnvidia-container
+          ref: v1.17.8
+          path: nvidia-container-toolkit/sources/libnvidia-container
+      - name: Checkout NVIDIA Container Toolkit source
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/nvidia-container-toolkit
+          ref: v1.17.8
+          path: nvidia-container-toolkit/sources/nvidia-container-toolkit
+      - name: Checkout NVIDIA nvidia-modprobe source
+        uses: actions/checkout@v4
+        with:
+          repository: NVIDIA/nvidia-modprobe
+          ref: 550.54.14
+          path: nvidia-container-toolkit/sources/nvidia-modprobe
+      - name: Archive toolkit upstream source trees
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p nvidia-container-toolkit/sources-archive
+          git -C nvidia-container-toolkit/sources/libnvidia-container archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/libnvidia-container-v1.17.8.tar.gz
+          git -C nvidia-container-toolkit/sources/nvidia-container-toolkit archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
+          git -C nvidia-container-toolkit/sources/nvidia-modprobe archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/nvidia-modprobe-550.54.14.tar.gz
+          rm -rf nvidia-container-toolkit/sources
+          test -s nvidia-container-toolkit/sources-archive/libnvidia-container-v1.17.8.tar.gz
+          test -s nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
+          test -s nvidia-container-toolkit/sources-archive/nvidia-modprobe-550.54.14.tar.gz
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -163,11 +194,40 @@ jobs:
           path: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.oci.tar
           if-no-files-found: error
           retention-days: 14
+      - name: Build NVIDIA Container Toolkit system extension
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Pkgfile \
+            --target nvidia-container-toolkit \
+            --build-arg TALOS_VERSION=v1.13.10 \
+            --output "type=docker,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.17.8-talos-v1.13.10.docker.tar" \
+            .
+      - name: Publish NVIDIA Container Toolkit extension for installer
+        id: publish-toolkit
+        env:
+          TOOLKIT_TAR: ${{ runner.temp }}/nvidia-container-toolkit-1.17.8-talos-v1.13.10.docker.tar
+          TOOLKIT_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-nvidia-container-toolkit
+        run: |
+          set -euo pipefail
+          test -s "$TOOLKIT_TAR"
+          load_output="$(docker load --input "$TOOLKIT_TAR")"
+          printf '%s\n' "$load_output"
+          loaded_image="$(printf '%s\n' "$load_output" | sed -n -e 's/^Loaded image: //p' -e 's/^Loaded image ID: //p' | tail -n 1)"
+          test -n "$loaded_image" || { echo "Unable to identify loaded toolkit image" >&2; exit 1; }
+          docker image inspect "$loaded_image" >/dev/null
+          short_sha="$(git rev-parse --short=7 "$GITHUB_SHA")"
+          toolkit_ref="${TOOLKIT_IMAGE}:${short_sha}"
+          docker tag "$loaded_image" "$toolkit_ref"
+          docker push "$toolkit_ref"
+          echo "image_ref=$toolkit_ref" >> "$GITHUB_OUTPUT"
+          echo "Published toolkit extension: $toolkit_ref" >> "$GITHUB_STEP_SUMMARY"
       - name: Build custom installer image with official and nvidia extensions
         env:
           TALOS_VERSION: v1.13.10
           EXTENSION_IMAGE: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar
           CUSTOM_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-extension:535.161.07-talos-v1.13.10
+          TOOLKIT_EXTENSION_REF: ${{ steps.publish-toolkit.outputs.image_ref }}
           OUT_DIR: ${{ runner.temp }}/installer-out
         run: |
           bash scripts/build-installer-image.sh

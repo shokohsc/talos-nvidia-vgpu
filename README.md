@@ -109,3 +109,12 @@ The fetcher retrieves the token at every service start and fails closed if DNS, 
 The optional legacy GRID licensing mode remains available through a `/run/gridd.conf` override. It is separate from FastAPI-DLS/NVIDIA License System and should only be used when connecting to a legacy GRID License Server.
 
 The service's runtime logs and NVIDIA's `nvidia-smi -q` license status are the source of truth. A successful extension build or a running `nvidia-gridd` process alone does not prove that a license was acquired.
+
+## NVIDIA containerd runtime on Talos
+
+See [docs/containerd-nvidia-runtime.md](docs/containerd-nvidia-runtime.md) for the standalone toolkit extension, which installs the runtime and automatically registers the `nvidia` handler through Talos containerd configuration.
+
+
+## NVIDIA Container Toolkit
+
+The separate `nvidia-container-toolkit` system extension packages NVIDIA Container Toolkit 1.17.8 and `libnvidia-container` 1.17.8 without installing or replacing the GRID driver userspace. It provides the `nvidia-container-runtime`, CLI, hooks, and the named containerd runtime handler. See [docs/containerd-nvidia-runtime.md](docs/containerd-nvidia-runtime.md). Install it alongside `nvidia-vgpu-guest` in the Talos Image Factory schematic. The Kubernetes RuntimeClass and NVIDIA device plugin remain separate cluster resources.

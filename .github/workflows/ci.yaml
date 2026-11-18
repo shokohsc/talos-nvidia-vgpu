@@ -14,6 +14,7 @@ jobs:
         run: |
           bash -n scripts/validate-artifacts.sh
           bash -n scripts/extract-driver.sh
+          bash -n scripts/build-installer-image.sh
           sh -n nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
       - name: Validate YAML
         run: |
@@ -27,6 +28,8 @@ jobs:
               if path.name == "Pkgfile":
                   text = "\n".join(text.splitlines()[1:])
               yaml.safe_load(text)
+          toolkit_pkg = pathlib.Path("nvidia-container-toolkit/pkg.yaml").read_text()
+          yaml.safe_load(toolkit_pkg)
 
           manifest = pathlib.Path("nvidia-vgpu-guest/manifest.yaml.tmpl").read_text()
           manifest = manifest.replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.10")
@@ -35,6 +38,8 @@ jobs:
 
           workflow = pathlib.Path(".github/workflows/driver-build.yaml").read_text()
           yaml.safe_load(workflow)
+          toolkit_manifest = pathlib.Path("nvidia-container-toolkit/manifest.yaml.tmpl").read_text().replace("{{ .BUILD_ARG_TALOS_VERSION }}", "v1.13.10")
+          yaml.safe_load(toolkit_manifest)
           service = pathlib.Path("nvidia-vgpu-guest/nvidia-gridd.yaml").read_text()
           yaml.safe_load(service)
           print("YAML syntax checks passed")
@@ -56,3 +61,17 @@ jobs:
           grep -q '/src/Module.symvers' nvidia-vgpu-guest/pkg.yaml
           grep -q 'install -m 0755 /bin/busybox' nvidia-vgpu-guest/pkg.yaml
           grep -q '/bin/busybox' nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
+
+      - name: Validate NVIDIA Container Toolkit extension inputs
+        run: |
+          test -s nvidia-container-toolkit/pkg.yaml
+          test -s nvidia-container-toolkit/manifest.yaml.tmpl
+          grep -q 'TOOLKIT_EXTENSION_REF' scripts/build-installer-image.sh
+          grep -q 'nvidia-container-toolkit' .github/workflows/driver-build.yaml
+          grep -q 'TOOLKIT_EXTENSION_REF:' .github/workflows/driver-build.yaml
+          grep -q 'libnvidia-container' nvidia-container-toolkit/pkg.yaml
+          grep -q 'nvidia-container-runtime' nvidia-container-toolkit/pkg.yaml
+          grep -q 'nvidia-container-cli' nvidia-container-toolkit/pkg.yaml
+          grep -q '10-nvidia-container-runtime.part' nvidia-container-toolkit/pkg.yaml
+          ! grep -q 'nvidia-vgpu-guest' nvidia-container-toolkit/pkg.yaml
+          grep -q 'LDCONFIG=true' nvidia-container-toolkit/pkg.yaml

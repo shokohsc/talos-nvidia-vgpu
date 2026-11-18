@@ -7,7 +7,7 @@ PKGS_DIR ?= _out/pkgs
 KERNEL_IMAGE ?= ghcr.io/shokohsc/talos-nvidia-vgpu-kernel-build:talos-$(TALOS_VERSION)-$(PKGS_REF)
 EXTENSION_IMAGE ?= _out/nvidia-vgpu-$(NVIDIA_DRIVER_VERSION)-talos-$(TALOS_VERSION).oci.tar
 
-.PHONY: extract-driver kernel-build build installer-image local clean
+.PHONY: extract-driver kernel-build build toolkit-build installer-image local clean
 
 require-%:
 	@test -n "$($*)" || (echo "ERROR: $* is required" >&2; exit 2)
@@ -41,6 +41,15 @@ build: require-KERNEL_IMAGE
 		--build-arg NVIDIA_DRIVER_VERSION="$(NVIDIA_DRIVER_VERSION)" \
 		--build-arg KERNEL_IMAGE="$(KERNEL_IMAGE)" \
 		--output "type=oci,dest=$(EXTENSION_IMAGE)" .
+
+TOOLKIT_IMAGE ?= _out/nvidia-container-toolkit-1.17.8-talos-$(TALOS_VERSION).oci.tar
+
+toolkit-build:
+	@mkdir -p "$(dirname "$(TOOLKIT_IMAGE)")"
+	docker buildx build --platform "$(PLATFORM)" -f Pkgfile \
+		--target nvidia-container-toolkit \
+		--build-arg TALOS_VERSION="$(TALOS_VERSION)" \
+		--output "type=oci,dest=$(TOOLKIT_IMAGE)" .
 
 installer-image: build
 	TALOS_VERSION="$(TALOS_VERSION)" EXTENSION_IMAGE="$(EXTENSION_IMAGE)" \
