@@ -68,7 +68,7 @@ steps:
         loader=/rootfs/usr/local/lib/ld-linux-x86-64.so.2
         runtime=/rootfs/usr/local/bin/nvidia-container-runtime
         dependencies="$("${loader}" --library-path /rootfs/usr/local/lib --list "${runtime}" 2>&1)"
-        printf '%s\\n' "${dependencies}"
+        printf '%s\n' "${dependencies}"
         if grep -Fq 'not found' <<< "${dependencies}"; then
           echo "Unresolved NVIDIA Container Toolkit runtime dependency" >&2
           exit 1
