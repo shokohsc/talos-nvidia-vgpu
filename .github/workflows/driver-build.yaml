@@ -15,7 +15,6 @@ on:
       - "nvidia-container-toolkit/**"
       - "scripts/extract-driver.sh"
       - "scripts/build-installer-image.sh"
-      - "nvidia-container-toolkit/**"
       - ".github/workflows/driver-build.yaml"
 permissions:
   contents: read
@@ -228,7 +227,7 @@ jobs:
           TALOS_VERSION: v1.13.10
           EXTENSION_IMAGE: ${{ runner.temp }}/nvidia-vgpu-535.161.07-talos-v1.13.10.docker.tar
           CUSTOM_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-extension:535.161.07-talos-v1.13.10
-          TOOLKIT_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-nvidia-container-toolkit:${{ github.sha }}
+          TOOLKIT_EXTENSION_REF: ${{ steps.publish-toolkit.outputs.image_ref }}
           OUT_DIR: ${{ runner.temp }}/installer-out
         run: |
           bash scripts/build-installer-image.sh
