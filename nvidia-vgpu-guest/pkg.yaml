@@ -376,6 +376,22 @@ steps:
         }
         ln -sfn "$(basename "$nvml_real")" /rootfs/usr/local/lib/libnvidia-ml.so.1
 
+        # NVIDIA Container Toolkit discovers host driver libraries through
+        # glibc's loader cache. Talos is read-only at runtime, so generate the
+        # cache now, after the GRID libraries and soname links are installed.
+        # Build it against the extension rootfs (not the builder's /etc) and
+        # preserve the existing library search configuration where possible.
+        mkdir -p /rootfs/etc
+        if [[ -f /rootfs/etc/ld.so.conf ]]; then
+          grep -Fxq '/usr/local/lib' /rootfs/etc/ld.so.conf || \
+            printf '%s\n' '/usr/local/lib' >> /rootfs/etc/ld.so.conf
+        else
+          printf '%s\n' '/usr/local/lib' > /rootfs/etc/ld.so.conf
+        fi
+        # -X updates the cache without trying to rewrite NVIDIA's vendor
+        # symlinks, some of which intentionally have nonstandard targets.
+        ldconfig -X -r /rootfs
+
         test -x /rootfs/usr/bin/nvidia-smi || {
           echo "NVIDIA installer did not install /rootfs/usr/bin/nvidia-smi" >&2
           find /rootfs -name nvidia-smi -print >&2
@@ -586,6 +602,30 @@ steps:
         test -e /rootfs/usr/local/lib/libnvidia-ml.so.1 || {
           echo "Missing usable NVML soname /usr/local/lib/libnvidia-ml.so.1" >&2
           find /rootfs/usr/local/lib -name 'libnvidia-ml.so*' -ls >&2
+          exit 1
+        }
+        # Verify the extension ships a loader cache that can resolve both
+        # primary NVIDIA driver libraries from the host's /usr/local/lib.
+        test -s /rootfs/etc/ld.so.cache || {
+          echo "Missing generated /etc/ld.so.cache" >&2
+          exit 1
+        }
+        driver_library_cache="$(ldconfig -p -C /rootfs/etc/ld.so.cache)"
+        printf '%s\n' "$driver_library_cache"
+        grep -Fq 'libcuda.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not contain libcuda.so.1" >&2
+          exit 1
+        }
+        grep -Fq '/usr/local/lib/libcuda.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not resolve libcuda.so.1 from /usr/local/lib" >&2
+          exit 1
+        }
+        grep -Fq 'libnvidia-ml.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not contain libnvidia-ml.so.1" >&2
+          exit 1
+        }
+        grep -Fq '/usr/local/lib/libnvidia-ml.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not resolve libnvidia-ml.so.1 from /usr/local/lib" >&2
           exit 1
         }
         test -x /rootfs/usr/bin/nvidia-smi || {
