@@ -84,7 +84,14 @@ steps:
           echo "Unresolved NVIDIA Container Toolkit runtime dependency" >&2
           exit 1
         fi
-        "${loader}" --library-path /rootfs/usr/local/lib "${runtime}" --version
+        # The runtime initializes its OCI-runtime backend even for --version.
+        # Supply a harmless stub so this packaging test does not depend on a
+        # host runc/docker-runc/crun binary being installed in the build image.
+        runtime_stub_dir="$(mktemp -d)"
+        trap 'rm -rf "${runtime_stub_dir}"' EXIT
+        printf '%s\n' '#!/bin/sh' 'exit 0' > "${runtime_stub_dir}/runc"
+        chmod 0755 "${runtime_stub_dir}/runc"
+        PATH="${runtime_stub_dir}:${PATH}" "${loader}" --library-path /rootfs/usr/local/lib "${runtime}" --version
         grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' \
           /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
         mkdir -p /extensions-validator-rootfs
