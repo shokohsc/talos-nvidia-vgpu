@@ -75,7 +75,7 @@ steps:
         # Provide a harmless stub so this packaging test stays self-contained.
         runtime_stub_dir="$(mktemp -d)"
         trap 'rm -rf "${runtime_stub_dir}"' EXIT
-        printf '%s\\n' '#!/bin/sh' 'exit 0' > "${runtime_stub_dir}/runc"
+        printf '%s\n' '#!/bin/sh' 'exit 0' > "${runtime_stub_dir}/runc"
         chmod +x "${runtime_stub_dir}/runc"
         export PATH="${runtime_stub_dir}:${PATH}"
         dependencies="$("${loader}" --library-path /rootfs/usr/local/lib --list "${runtime}" 2>&1)"
