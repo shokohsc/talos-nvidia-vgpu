@@ -384,9 +384,9 @@ steps:
         mkdir -p /rootfs/etc
         if [[ -f /rootfs/etc/ld.so.conf ]]; then
           grep -Fxq '/usr/local/lib' /rootfs/etc/ld.so.conf || \
-            printf '%s\\n' '/usr/local/lib' >> /rootfs/etc/ld.so.conf
+            printf '%s\n' '/usr/local/lib' >> /rootfs/etc/ld.so.conf
         else
-          printf '%s\\n' '/usr/local/lib' > /rootfs/etc/ld.so.conf
+          printf '%s\n' '/usr/local/lib' > /rootfs/etc/ld.so.conf
         fi
         # -X updates the cache without trying to rewrite NVIDIA's vendor
         # symlinks, some of which intentionally have nonstandard targets.
