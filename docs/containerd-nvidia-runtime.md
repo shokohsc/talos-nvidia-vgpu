@@ -1,7 +1,7 @@
 # NVIDIA Container Toolkit on Talos
 
 The `nvidia-container-toolkit` system extension packages NVIDIA Container Toolkit
-1.17.8 and `libnvidia-container` 1.17.8 as a standalone extension. It includes
+1.18.2 and `libnvidia-container` 1.18.2 as a standalone extension. It includes
 `nvidia-container-runtime`, `nvidia-container-runtime-hook`, `nvidia-ctk`,
 `nvidia-cdi-hook`, `nvidia-container-cli`, and `libnvidia-container`.
 
@@ -25,7 +25,7 @@ runs the packaged runtime through the bundled glibc loader and checks that its
 direct shared-library dependencies resolve.
 
 The optional NVIDIA sandbox-utils discovery library is not bundled by this
-extension. NVIDIA Container Toolkit 1.17.8 treats its absence as an optional
+extension. NVIDIA Container Toolkit 1.18.2 treats its absence as an optional
 discovery feature and logs that it is unavailable; it is not the NVML library
 and should not be confused with the GRID driver libraries.
 
@@ -41,6 +41,20 @@ No additional machine-configuration patch is required for runtime registration.
 Do not also apply the older manual runtime patch; duplicate containerd runtime
 tables can cause containerd configuration errors during boot.
 
+## NVIDIA runtime mode
+
+The extension writes `/etc/nvidia-container-runtime/config.toml` and explicitly selects
+`mode = "jit-cdi"`. This is intentional: the legacy runtime mode invokes the
+prestart hook that calls `nvidia-container-cli` to configure device cgroups.
+On this Talos kernel that path can fail while loading a BPF device-filter program
+(the `last insn is not an exit or jmp` error). JIT-CDI generates the requested
+NVIDIA CDI edits in memory and avoids that legacy device-cgroup hook path.
+
+Talos does not need NVIDIA's systemd-based persistent CDI refresh service for
+this mode; the runtime generates the CDI specification when each container is
+created. The containerd default remains `runc`, and Kubernetes continues to
+select the named `nvidia` handler through `runtimeClassName: nvidia`.
+
 ## Build and install
 
 Build both OCI extensions for the same Talos release and add both to the
@@ -49,7 +63,7 @@ Talos Image Factory schematic:
 - `nvidia-vgpu-guest` (GRID 535.161.07 driver and licensing service)
 - `nvidia-container-toolkit` (glibc-linked runtime and libnvidia-container)
 
-The Toolkit builder fetches and pins the upstream v1.17.8 sources plus the
+The Toolkit builder fetches and pins the upstream v1.18.2 sources plus the
 nvidia-modprobe 550.54.14 source. Run `make toolkit-build` to build the
 glibc-linked payload and package the Talos extension. Docker Buildx is required.
 
