@@ -376,6 +376,22 @@ steps:
         }
         ln -sfn "$(basename "$nvml_real")" /rootfs/usr/local/lib/libnvidia-ml.so.1
 
+        # NVIDIA Container Toolkit discovers host driver libraries through
+        # glibc's loader cache. Talos is read-only at runtime, so generate the
+        # cache now, after the GRID libraries and soname links are installed.
+        # Build it against the extension rootfs (not the builder's /etc) and
+        # preserve the existing library search configuration where possible.
+        mkdir -p /rootfs/etc
+        if [[ -f /rootfs/etc/ld.so.conf ]]; then
+          grep -Fxq '/usr/local/lib' /rootfs/etc/ld.so.conf || \
+            printf '%s\\n' '/usr/local/lib' >> /rootfs/etc/ld.so.conf
+        else
+          printf '%s\\n' '/usr/local/lib' > /rootfs/etc/ld.so.conf
+        fi
+        # -X updates the cache without trying to rewrite NVIDIA's vendor
+        # symlinks, some of which intentionally have nonstandard targets.
+        ldconfig -X -r /rootfs
+
         test -x /rootfs/usr/bin/nvidia-smi || {
           echo "NVIDIA installer did not install /rootfs/usr/bin/nvidia-smi" >&2
           find /rootfs -name nvidia-smi -print >&2
