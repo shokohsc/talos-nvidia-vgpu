@@ -611,9 +611,21 @@ steps:
           exit 1
         }
         driver_library_cache="$(ldconfig -p -C /rootfs/etc/ld.so.cache)"
-        printf '%s\\n' "$driver_library_cache"
-        grep -Eq 'libcuda\\.so\\.1 .*=> /usr/local/lib/libcuda\\.so\\.1
-          echo "Missing /usr/bin/nvidia-smi" >&2
+        printf '%s\n' "$driver_library_cache"
+        grep -Fq 'libcuda.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not contain libcuda.so.1" >&2
+          exit 1
+        }
+        grep -Fq '/usr/local/lib/libcuda.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not resolve libcuda.so.1 from /usr/local/lib" >&2
+          exit 1
+        }
+        grep -Fq 'libnvidia-ml.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not contain libnvidia-ml.so.1" >&2
+          exit 1
+        }
+        grep -Fq '/usr/local/lib/libnvidia-ml.so.1' <<< "$driver_library_cache" || {
+          echo "Generated loader cache does not resolve libnvidia-ml.so.1 from /usr/local/lib" >&2
           exit 1
         }
         test -x /rootfs/usr/bin/nvidia-modprobe
