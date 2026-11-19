@@ -1,0 +1,79 @@
+# Build NVIDIA Container Toolkit against glibc.
+# Talos itself is musl-based, but the proprietary GRID userspace (NVML/CUDA)
+# is glibc-linked. A musl-linked runtime cannot dlopen those libraries safely.
+FROM golang:1.23-bookworm AS build
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential ca-certificates git make pkg-config patch patchelf \
+      libcap-dev libseccomp-dev libelf-dev libtirpc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY nvidia-container-toolkit/sources-archive/ /sources/
+
+RUN set -eux; \
+    mkdir -p /tmp/libnvidia-container /tmp/nvidia-container-toolkit /tmp/nvidia-modprobe; \
+    tar -xzf /sources/libnvidia-container-v1.17.8.tar.gz -C /tmp/libnvidia-container; \
+    tar -xzf /sources/nvidia-container-toolkit-v1.17.8.tar.gz -C /tmp/nvidia-container-toolkit; \
+    tar -xzf /sources/nvidia-modprobe-550.54.14.tar.gz -C /tmp/nvidia-modprobe; \
+    for source_dir in /tmp/libnvidia-container /tmp/nvidia-container-toolkit; do \
+      git -C "${source_dir}" init; \
+      git -C "${source_dir}" -c user.name='Talos NVIDIA build' -c user.email='build@localhost' commit --allow-empty -m 'Seed source archive revision'; \
+    done; \
+    toolkit_config=/tmp/nvidia-container-toolkit/internal/config/config.go; \
+    test -f "${toolkit_config}"; \
+    sed -i 's|/usr/bin/nvidia-ctk|/usr/local/bin/nvidia-ctk|g; s|/usr/bin/nvidia-cdi-hook|/usr/local/bin/nvidia-cdi-hook|g; s|/usr/bin/nvidia-container-runtime-hook|/usr/local/bin/nvidia-container-runtime-hook|g; s|DefaultExecutableDir = "/usr/bin"|DefaultExecutableDir = "/usr/local/bin"|g' "${toolkit_config}"; \
+    grep -Fq 'DefaultExecutableDir = "/usr/local/bin"' "${toolkit_config}"; \
+    mkdir -p /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8; \
+    cp -a /tmp/nvidia-modprobe/modprobe-utils /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8/; \
+    patch -d /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8 -p1 < /tmp/libnvidia-container/mk/nvidia-modprobe.patch; \
+    touch /tmp/libnvidia-container/deps/src/nvidia-modprobe-1.17.8/.download_stamp
+
+RUN set -eux; \
+    cd /tmp/libnvidia-container; \
+    make deps MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_LIBELF=yes; \
+    make -j"$(nproc)" MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_NVCGO=yes WITH_LIBELF=yes WITH_TIRPC=no CPPFLAGS="-D_GNU_SOURCE -I/usr/include/tirpc" LDLIBS="-ltirpc"; \
+    make install MAJOR=1 MINOR=17 PATCH=8 VERSION=1.17.8 VERSION_STRING=1.17.8 REVISION=6eda4d76c8c5f8fc174e4abca83e513fb4dd63b0 WITH_LIBELF=yes LDCONFIG=true DESTDIR=/out prefix=/usr/local exec_prefix=/usr/local bindir=/usr/local/bin libdir=/usr/local/lib includedir=/usr/local/include docdir=/usr/local/share/doc; \
+    mkdir -p /usr/local/lib; \
+    cp -a /out/usr/local/lib/. /usr/local/lib/; \
+    cd /tmp/nvidia-container-toolkit; \
+    LD_LIBRARY_PATH=/usr/local/lib make cmds; \
+    mkdir -p /out/usr/local/bin /out/usr/local/lib /out/usr/local/share/licenses/nvidia-container-toolkit; \
+    find /tmp/nvidia-container-toolkit -maxdepth 1 -type f -executable -exec install -m 0755 {} /out/usr/local/bin/ \;; \
+    ln -sfn libnvidia-container.so.1.17.8 /out/usr/local/lib/libnvidia-container.so.1; \
+    ln -sfn libnvidia-container.so.1 /out/usr/local/lib/libnvidia-container.so; \
+    ln -sfn libnvidia-container-go.so.1.17.8 /out/usr/local/lib/libnvidia-container-go.so.1; \
+    ln -sfn libnvidia-container-go.so.1 /out/usr/local/lib/libnvidia-container-go.so; \
+    cp /tmp/libnvidia-container/LICENSE /out/usr/local/share/licenses/nvidia-container-toolkit/; \
+    cp /tmp/nvidia-container-toolkit/LICENSE /out/usr/local/share/licenses/nvidia-container-toolkit/ 2>/dev/null || true
+
+# Bundle non-glibc shared dependencies and make every executable use the
+# private /usr/local/lib loader location supplied by the Talos extension.
+RUN set -eux; \
+    for elf in /out/usr/local/bin/* /out/usr/local/lib/libnvidia-container*.so.*; do \
+      test -f "${elf}" || continue; \
+      LD_LIBRARY_PATH=/out/usr/local/lib ldd "${elf}" > /tmp/ldd.txt; \
+      if grep -q 'not found' /tmp/ldd.txt; then cat /tmp/ldd.txt >&2; exit 1; fi; \
+      awk '/=> \/.*\(/ { print $3 } /^\// { print $1 }' /tmp/ldd.txt | sort -u | while read -r dependency; do \
+        case "${dependency}" in \
+          /out/usr/local/lib/*|*/libc.so.6|*/libm.so.6|*/libpthread.so.0|*/libdl.so.2|*/librt.so.1|*/ld-linux-x86-64.so.2) continue ;; \
+        esac; \
+        install -m 0755 "${dependency}" "/out/usr/local/lib/$(basename "${dependency}")"; \
+      done; \
+    done; \
+    for elf in /out/usr/local/bin/*; do \
+      patchelf --set-interpreter /usr/local/lib/ld-linux-x86-64.so.2 "${elf}"; \
+      patchelf --set-rpath /usr/local/lib "${elf}"; \
+    done; \
+    for elf in /out/usr/local/lib/*.so.*; do \
+      test -f "${elf}" || continue; \
+      patchelf --set-rpath /usr/local/lib "${elf}" || true; \
+    done; \
+    mkdir -p /tmp/test-runtime-bin; \
+    printf '%s\n' '#!/bin/sh' 'exit 0' > /tmp/test-runtime-bin/runc; \
+    chmod 0755 /tmp/test-runtime-bin/runc; \
+    PATH="/tmp/test-runtime-bin:${PATH}" /lib64/ld-linux-x86-64.so.2 --library-path /out/usr/local/lib /out/usr/local/bin/nvidia-container-runtime --version; \
+    /lib64/ld-linux-x86-64.so.2 --library-path /out/usr/local/lib /out/usr/local/bin/nvidia-container-cli --version
+
+FROM scratch AS output
+COPY --from=build /out/ /

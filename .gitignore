@@ -6,3 +6,5 @@ nvidia-vgpu-guest/driver/
 *.ko
 *.ko.xz
 *.ko.zst
+nvidia-container-toolkit/sources-archive/
+nvidia-container-toolkit/prebuilt/

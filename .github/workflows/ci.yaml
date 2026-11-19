@@ -16,6 +16,7 @@ jobs:
           bash -n scripts/validate-artifacts.sh
           bash -n scripts/extract-driver.sh
           bash -n scripts/build-installer-image.sh
+          bash -n scripts/build-container-toolkit.sh
           sh -n nvidia-vgpu-guest/files/nvidia-gridd-wrapper.sh
       - name: Validate package, manifest, and workflow YAML
         run: |
@@ -69,6 +70,10 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'nvidia-container-toolkit' .github/workflows/container-toolkit-build.yaml
+          grep -Fq 'Dockerfile.glibc' scripts/build-container-toolkit.sh
+          grep -Fq 'patchelf --set-interpreter /usr/local/lib/ld-linux-x86-64.so.2' nvidia-container-toolkit/Dockerfile.glibc
+          grep -Fq 'ghcr.io/siderolabs/glibc:2.44' nvidia-container-toolkit/pkg.yaml
+          grep -Fq 'ld-linux-x86-64.so.2' nvidia-container-toolkit/pkg.yaml
           grep -Fq 'nvidia-gridd' .github/workflows/gridd-service-build.yaml
           grep -Fq 'CUSTOM_EXTENSION_REF:' .github/workflows/installer-build.yaml
           grep -Fq 'TOOLKIT_EXTENSION_REF:' .github/workflows/installer-build.yaml

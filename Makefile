@@ -45,6 +45,7 @@ build: require-KERNEL_IMAGE
 TOOLKIT_IMAGE ?= _out/nvidia-container-toolkit-1.17.8-talos-$(TALOS_VERSION).oci.tar
 
 toolkit-build:
+	bash scripts/build-container-toolkit.sh
 	@mkdir -p "$(dirname "$(TOOLKIT_IMAGE)")"
 	docker buildx build --platform "$(PLATFORM)" -f Pkgfile \
 		--target nvidia-container-toolkit \

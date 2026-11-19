@@ -5,6 +5,7 @@ on:
       - "Pkgfile"
       - "base/**"
       - "nvidia-container-toolkit/**"
+      - "scripts/build-container-toolkit.sh"
       - ".github/workflows/container-toolkit-build.yaml"
   push:
     branches: [main, "feature/**"]
@@ -55,6 +56,8 @@ jobs:
           test -s nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
           test -s nvidia-container-toolkit/sources-archive/nvidia-modprobe-550.54.14.tar.gz
       - uses: docker/setup-buildx-action@v3
+      - name: Build glibc-linked Toolkit payload
+        run: bash scripts/build-container-toolkit.sh
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
