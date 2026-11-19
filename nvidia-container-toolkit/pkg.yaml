@@ -5,6 +5,7 @@ install:
   - bash
   - coreutils
   - grep
+  - go
 dependencies:
   # Keep the validator without merging the Talos tools rootfs over Alpine.
   - image: ghcr.io/shokohsc/talos-nvidia-vgpu-extensions-validator:v1.13.10-84cecb0
@@ -47,13 +48,35 @@ steps:
         [nvidia-container-runtime]
           mode = "jit-cdi"
         EOF
-        # Talos extensions cannot write arbitrary paths under /etc. Use a
-        # wrapper to point the NVIDIA runtime at its supported XDG config path.
-        cat > /rootfs/usr/local/bin/nvidia-container-runtime-wrapper <<'EOF'
-        #!/bin/sh
-        export XDG_CONFIG_HOME=/usr/local/etc
-        exec /usr/local/bin/nvidia-container-runtime "$@"
+        # Talos does not provide /bin/sh. Build a static, shell-free wrapper
+        # that points the NVIDIA runtime at its supported XDG config path.
+        cat > /tmp/nvidia-container-runtime-wrapper.go <<'EOF'
+        package main
+
+        import (
+          "fmt"
+          "os"
+          "syscall"
+        )
+
+        func main() {
+          if err := os.Setenv("XDG_CONFIG_HOME", "/usr/local/etc"); err != nil {
+            fmt.Fprintf(os.Stderr, "set XDG_CONFIG_HOME: %v\n", err)
+            os.Exit(1)
+          }
+
+          runtime := "/usr/local/bin/nvidia-container-runtime"
+          args := append([]string{runtime}, os.Args[1:]...)
+          if err := syscall.Exec(runtime, args, os.Environ()); err != nil {
+            fmt.Fprintf(os.Stderr, "exec NVIDIA container runtime: %v\n", err)
+            os.Exit(1)
+          }
+        }
         EOF
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=off \
+          go build -trimpath -ldflags="-s -w" \
+          -o /rootfs/usr/local/bin/nvidia-container-runtime-wrapper \
+          /tmp/nvidia-container-runtime-wrapper.go
         chmod 0755 /rootfs/usr/local/bin/nvidia-container-runtime-wrapper
         cat > /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part <<'EOF'
         [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia]
@@ -107,8 +130,15 @@ steps:
         PATH="${runtime_stub_dir}:${PATH}" "${loader}" --library-path /rootfs/usr/local/lib "${runtime}" --version
         grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime-wrapper"' \
           /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
-        grep -Fq 'export XDG_CONFIG_HOME=/usr/local/etc' \
-          /rootfs/usr/local/bin/nvidia-container-runtime-wrapper
+        # The wrapper must be an ELF executable, not a script requiring /bin/sh.
+        wrapper=/rootfs/usr/local/bin/nvidia-container-runtime-wrapper
+        wrapper_magic="$(od -An -tx1 -N4 "${wrapper}" | tr -d ' \n')"
+        test "${wrapper_magic}" = "7f454c46"
+        wrapper_build_info="$(go version -m "${wrapper}")"
+        printf '%s\n' "${wrapper_build_info}"
+        grep -Fq 'CGO_ENABLED=0' <<< "${wrapper_build_info}"
+        grep -Fq 'GOOS=linux' <<< "${wrapper_build_info}"
+        grep -Fq 'GOARCH=amd64' <<< "${wrapper_build_info}"
         grep -Fq 'mode = "jit-cdi"' \
           /rootfs/usr/local/etc/nvidia-container-runtime/config.toml
         mkdir -p /extensions-validator-rootfs
