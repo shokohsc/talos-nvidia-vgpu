@@ -25,7 +25,7 @@ steps:
         test -x /pkg/prebuilt/usr/local/bin/nvidia-container-cli
         test -x /pkg/prebuilt/usr/local/bin/nvidia-ctk
         test -x /pkg/prebuilt/usr/local/bin/nvidia-cdi-hook
-        test -s /pkg/prebuilt/usr/local/lib/libnvidia-container.so.1.17.8
+        test -s /pkg/prebuilt/usr/local/lib/libnvidia-container.so.1.18.2
         test -s /usr/local/lib/libc.so.6
         test -x /usr/local/lib/ld-linux-x86-64.so.2
     install:
@@ -33,7 +33,7 @@ steps:
         set -euxo pipefail
         mkdir -p /rootfs/usr/local/bin /rootfs/usr/local/lib \
           /rootfs/usr/local/share/licenses/nvidia-container-toolkit \
-          /rootfs/etc/cri/conf.d
+          /rootfs/etc/cri/conf.d /rootfs/etc/nvidia-container-runtime
         cp -a /pkg/prebuilt/usr/local/bin/. /rootfs/usr/local/bin/
         cp -a /pkg/prebuilt/usr/local/lib/. /rootfs/usr/local/lib/
         # Use the Talos-compatible glibc runtime supplied by siderolabs/glibc.
@@ -42,6 +42,10 @@ steps:
         cp -a /usr/local/lib/. /rootfs/usr/local/lib/
         cp -a /pkg/prebuilt/usr/local/share/licenses/nvidia-container-toolkit/. \
           /rootfs/usr/local/share/licenses/nvidia-container-toolkit/
+        cat > /rootfs/etc/nvidia-container-runtime/config.toml <<'EOF'
+        [nvidia-container-runtime]
+          mode = "jit-cdi"
+        EOF
         cat > /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part <<'EOF'
         [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia]
           privileged_without_host_devices = false
@@ -62,7 +66,7 @@ steps:
             exit 1
           fi
         done
-        test -s /rootfs/usr/local/lib/libnvidia-container.so.1.17.8
+        test -s /rootfs/usr/local/lib/libnvidia-container.so.1.18.2
         test -L /rootfs/usr/local/lib/libnvidia-container.so.1
         test -L /rootfs/usr/local/lib/libnvidia-container-go.so.1
         test -x /rootfs/usr/local/lib/ld-linux-x86-64.so.2
@@ -94,6 +98,7 @@ steps:
         PATH="${runtime_stub_dir}:${PATH}" "${loader}" --library-path /rootfs/usr/local/lib "${runtime}" --version
         grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' \
           /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
+        grep -Fq 'mode = "jit-cdi"' /rootfs/etc/nvidia-container-runtime/config.toml
         mkdir -p /extensions-validator-rootfs
         cp -a /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
