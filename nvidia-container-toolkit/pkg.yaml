@@ -71,6 +71,13 @@ steps:
         # dependencies before the extension is emitted.
         loader=/rootfs/usr/local/lib/ld-linux-x86-64.so.2
         runtime=/rootfs/usr/local/bin/nvidia-container-runtime
+        # The runtime initializes its low-level OCI runtime even for --version.
+        # Provide a harmless stub so this packaging test stays self-contained.
+        runtime_stub_dir="$(mktemp -d)"
+        trap 'rm -rf "${runtime_stub_dir}"' EXIT
+        printf '%s\\n' '#!/bin/sh' 'exit 0' > "${runtime_stub_dir}/runc"
+        chmod +x "${runtime_stub_dir}/runc"
+        export PATH="${runtime_stub_dir}:${PATH}"
         dependencies="$("${loader}" --library-path /rootfs/usr/local/lib --list "${runtime}" 2>&1)"
         printf '%s\n' "${dependencies}"
         if grep -Fq 'not found' <<< "${dependencies}"; then
