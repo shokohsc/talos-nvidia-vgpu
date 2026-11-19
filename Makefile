@@ -42,7 +42,7 @@ build: require-KERNEL_IMAGE
 		--build-arg KERNEL_IMAGE="$(KERNEL_IMAGE)" \
 		--output "type=oci,dest=$(EXTENSION_IMAGE)" .
 
-TOOLKIT_IMAGE ?= _out/nvidia-container-toolkit-1.17.8-talos-$(TALOS_VERSION).oci.tar
+TOOLKIT_IMAGE ?= _out/nvidia-container-toolkit-1.18.2-talos-$(TALOS_VERSION).oci.tar
 
 toolkit-build:
 	bash scripts/build-container-toolkit.sh

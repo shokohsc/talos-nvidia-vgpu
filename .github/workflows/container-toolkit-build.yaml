@@ -13,6 +13,7 @@ on:
       - "Pkgfile"
       - "base/**"
       - "nvidia-container-toolkit/**"
+      - "scripts/build-container-toolkit.sh"
       - ".github/workflows/container-toolkit-build.yaml"
   workflow_dispatch:
 permissions:
@@ -20,7 +21,7 @@ permissions:
   packages: write
 jobs:
   build-extension:
-    name: Build NVIDIA Container Toolkit 1.17.8 for Talos v1.13.10
+    name: Build NVIDIA Container Toolkit 1.18.2 for Talos v1.13.10
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -29,13 +30,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: NVIDIA/libnvidia-container
-          ref: v1.17.8
+          ref: v1.18.2
           path: nvidia-container-toolkit/sources/libnvidia-container
       - name: Checkout NVIDIA Container Toolkit source
         uses: actions/checkout@v4
         with:
           repository: NVIDIA/nvidia-container-toolkit
-          ref: v1.17.8
+          ref: v1.18.2
           path: nvidia-container-toolkit/sources/nvidia-container-toolkit
       - name: Checkout NVIDIA nvidia-modprobe source
         uses: actions/checkout@v4
@@ -48,12 +49,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p nvidia-container-toolkit/sources-archive
-          git -C nvidia-container-toolkit/sources/libnvidia-container archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/libnvidia-container-v1.17.8.tar.gz
-          git -C nvidia-container-toolkit/sources/nvidia-container-toolkit archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
+          git -C nvidia-container-toolkit/sources/libnvidia-container archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/libnvidia-container-v1.18.2.tar.gz
+          git -C nvidia-container-toolkit/sources/nvidia-container-toolkit archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.18.2.tar.gz
           git -C nvidia-container-toolkit/sources/nvidia-modprobe archive --format=tar HEAD | gzip -n > nvidia-container-toolkit/sources-archive/nvidia-modprobe-550.54.14.tar.gz
           rm -rf nvidia-container-toolkit/sources
-          test -s nvidia-container-toolkit/sources-archive/libnvidia-container-v1.17.8.tar.gz
-          test -s nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.17.8.tar.gz
+          test -s nvidia-container-toolkit/sources-archive/libnvidia-container-v1.18.2.tar.gz
+          test -s nvidia-container-toolkit/sources-archive/nvidia-container-toolkit-v1.18.2.tar.gz
           test -s nvidia-container-toolkit/sources-archive/nvidia-modprobe-550.54.14.tar.gz
       - uses: docker/setup-buildx-action@v3
       - name: Build glibc-linked Toolkit payload
@@ -70,22 +71,22 @@ jobs:
             --file Pkgfile \
             --target nvidia-container-toolkit \
             --build-arg TALOS_VERSION=v1.13.10 \
-            --output "type=oci,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.17.8-talos-v1.13.10.oci.tar" \
-            --output "type=docker,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.17.8-talos-v1.13.10.docker.tar" \
+            --output "type=oci,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.18.2-talos-v1.13.10.oci.tar" \
+            --output "type=docker,dest=$RUNNER_TEMP/nvidia-container-toolkit-1.18.2-talos-v1.13.10.docker.tar" \
             .
       - name: Upload toolkit extension OCI image
         uses: actions/upload-artifact@v4
         with:
-          name: nvidia-container-toolkit-1.17.8-talos-v1.13.10
-          path: ${{ runner.temp }}/nvidia-container-toolkit-1.17.8-talos-v1.13.10.oci.tar
+          name: nvidia-container-toolkit-1.18.2-talos-v1.13.10
+          path: ${{ runner.temp }}/nvidia-container-toolkit-1.18.2-talos-v1.13.10.oci.tar
           if-no-files-found: error
           retention-days: 14
       - name: Publish toolkit extension to GHCR
         id: publish-toolkit
         env:
-          TOOLKIT_TAR: ${{ runner.temp }}/nvidia-container-toolkit-1.17.8-talos-v1.13.10.docker.tar
+          TOOLKIT_TAR: ${{ runner.temp }}/nvidia-container-toolkit-1.18.2-talos-v1.13.10.docker.tar
           TOOLKIT_IMAGE: ghcr.io/shokohsc/talos-nvidia-vgpu-nvidia-container-toolkit
-          STABLE_TAG: 1.17.8-talos-v1.13.10
+          STABLE_TAG: 1.18.2-talos-v1.13.10
         run: |
           set -euo pipefail
           test -s "$TOOLKIT_TAR"
@@ -115,5 +116,5 @@ jobs:
             echo "### Published NVIDIA Container Toolkit extension"
             echo "- Commit-pinned image: `$commit_ref`"
             echo "- Talos/version alias: `$stable_ref`"
-            echo "- OCI artifact: nvidia-container-toolkit-1.17.8-talos-v1.13.10"
+            echo "- OCI artifact: nvidia-container-toolkit-1.18.2-talos-v1.13.10"
           } >> "$GITHUB_STEP_SUMMARY"

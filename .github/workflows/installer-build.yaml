@@ -20,7 +20,7 @@ jobs:
         driver-version: ["535.161.07", "535.309.01"]
     env:
       TALOS_VERSION: v1.13.10
-      TOOLKIT_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-nvidia-container-toolkit:1.17.8-talos-v1.13.10
+      TOOLKIT_EXTENSION_REF: ghcr.io/shokohsc/talos-nvidia-vgpu-nvidia-container-toolkit:1.18.2-talos-v1.13.10
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
