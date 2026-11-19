@@ -70,7 +70,7 @@ RUN set -eux; \
       patchelf --set-rpath /usr/local/lib "${elf}" || true; \
     done; \
     mkdir -p /tmp/test-runtime-bin; \
-    printf '%s\\n' '#!/bin/sh' 'exit 0' > /tmp/test-runtime-bin/runc; \
+    printf '%s\n' '#!/bin/sh' 'exit 0' > /tmp/test-runtime-bin/runc; \
     chmod 0755 /tmp/test-runtime-bin/runc; \
     PATH="/tmp/test-runtime-bin:${PATH}" /lib64/ld-linux-x86-64.so.2 --library-path /out/usr/local/lib /out/usr/local/bin/nvidia-container-runtime --version; \
     /lib64/ld-linux-x86-64.so.2 --library-path /out/usr/local/lib /out/usr/local/bin/nvidia-container-cli --version
