@@ -61,14 +61,14 @@ steps:
 
         func main() {
           if err := os.Setenv("XDG_CONFIG_HOME", "/usr/local/etc"); err != nil {
-            fmt.Fprintf(os.Stderr, "set XDG_CONFIG_HOME: %v\\n", err)
+            fmt.Fprintf(os.Stderr, "set XDG_CONFIG_HOME: %v\n", err)
             os.Exit(1)
           }
 
           runtime := "/usr/local/bin/nvidia-container-runtime"
           args := append([]string{runtime}, os.Args[1:]...)
           if err := syscall.Exec(runtime, args, os.Environ()); err != nil {
-            fmt.Fprintf(os.Stderr, "exec NVIDIA container runtime: %v\\n", err)
+            fmt.Fprintf(os.Stderr, "exec NVIDIA container runtime: %v\n", err)
             os.Exit(1)
           }
         }
@@ -132,10 +132,10 @@ steps:
           /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
         # The wrapper must be an ELF executable, not a script requiring /bin/sh.
         wrapper=/rootfs/usr/local/bin/nvidia-container-runtime-wrapper
-        wrapper_magic="$(od -An -tx1 -N4 "${wrapper}" | tr -d ' \\n')"
+        wrapper_magic="$(od -An -tx1 -N4 "${wrapper}" | tr -d ' \n')"
         test "${wrapper_magic}" = "7f454c46"
         wrapper_build_info="$(go version -m "${wrapper}")"
-        printf '%s\\n' "${wrapper_build_info}"
+        printf '%s\n' "${wrapper_build_info}"
         grep -Fq 'CGO_ENABLED=0' <<< "${wrapper_build_info}"
         grep -Fq 'GOOS=linux' <<< "${wrapper_build_info}"
         grep -Fq 'GOARCH=amd64' <<< "${wrapper_build_info}"
