@@ -33,7 +33,8 @@ steps:
         set -euxo pipefail
         mkdir -p /rootfs/usr/local/bin /rootfs/usr/local/lib \
           /rootfs/usr/local/share/licenses/nvidia-container-toolkit \
-          /rootfs/etc/cri/conf.d /rootfs/etc/nvidia-container-runtime
+          /rootfs/etc/cri/conf.d \
+          /rootfs/usr/local/etc/nvidia-container-runtime
         cp -a /pkg/prebuilt/usr/local/bin/. /rootfs/usr/local/bin/
         cp -a /pkg/prebuilt/usr/local/lib/. /rootfs/usr/local/lib/
         # Use the Talos-compatible glibc runtime supplied by siderolabs/glibc.
@@ -42,10 +43,18 @@ steps:
         cp -a /usr/local/lib/. /rootfs/usr/local/lib/
         cp -a /pkg/prebuilt/usr/local/share/licenses/nvidia-container-toolkit/. \
           /rootfs/usr/local/share/licenses/nvidia-container-toolkit/
-        cat > /rootfs/etc/nvidia-container-runtime/config.toml <<'EOF'
+        cat > /rootfs/usr/local/etc/nvidia-container-runtime/config.toml <<'EOF'
         [nvidia-container-runtime]
           mode = "jit-cdi"
         EOF
+        # Talos extensions cannot write arbitrary paths under /etc. Use a
+        # wrapper to point the NVIDIA runtime at its supported XDG config path.
+        cat > /rootfs/usr/local/bin/nvidia-container-runtime-wrapper <<'EOF'
+        #!/bin/sh
+        export XDG_CONFIG_HOME=/usr/local/etc
+        exec /usr/local/bin/nvidia-container-runtime "$@"
+        EOF
+        chmod 0755 /rootfs/usr/local/bin/nvidia-container-runtime-wrapper
         cat > /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part <<'EOF'
         [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia]
           privileged_without_host_devices = false
@@ -53,7 +62,7 @@ steps:
           runtime_root = ""
           runtime_type = "io.containerd.runc.v2"
           [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia.options]
-            BinaryName = "/usr/local/bin/nvidia-container-runtime"
+            BinaryName = "/usr/local/bin/nvidia-container-runtime-wrapper"
         EOF
     test:
       - |
@@ -96,9 +105,12 @@ steps:
         printf '%s\n' '#!/bin/sh' 'exit 0' > "${runtime_stub_dir}/runc"
         chmod 0755 "${runtime_stub_dir}/runc"
         PATH="${runtime_stub_dir}:${PATH}" "${loader}" --library-path /rootfs/usr/local/lib "${runtime}" --version
-        grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime"' \
+        grep -Fq 'BinaryName = "/usr/local/bin/nvidia-container-runtime-wrapper"' \
           /rootfs/etc/cri/conf.d/10-nvidia-container-runtime.part
-        grep -Fq 'mode = "jit-cdi"' /rootfs/etc/nvidia-container-runtime/config.toml
+        grep -Fq 'export XDG_CONFIG_HOME=/usr/local/etc' \
+          /rootfs/usr/local/bin/nvidia-container-runtime-wrapper
+        grep -Fq 'mode = "jit-cdi"' \
+          /rootfs/usr/local/etc/nvidia-container-runtime/config.toml
         mkdir -p /extensions-validator-rootfs
         cp -a /rootfs /extensions-validator-rootfs/rootfs
         cp /pkg/manifest.yaml /extensions-validator-rootfs/manifest.yaml
