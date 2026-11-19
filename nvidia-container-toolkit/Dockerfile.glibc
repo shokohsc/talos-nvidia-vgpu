@@ -18,7 +18,7 @@ RUN set -eux; \
     tar -xzf /sources/nvidia-modprobe-550.54.14.tar.gz -C /tmp/nvidia-modprobe; \
     # The parent make passes VERSION=1.18.2 through MAKEFLAGS to recursive makes. \
     # Keep libnvidia-container's nvidia-modprobe dependency pinned to 550.54.14. \
-    sed -i 's/^VERSION[[:space:]]*:=[[:space:]]*550\\.54\\.14$/override VERSION := 550.54.14/' /tmp/libnvidia-container/mk/nvidia-modprobe.mk; \
+    sed -i 's/^VERSION[[:space:]]*:=[[:space:]]*550[.]54[.]14$/override VERSION := 550.54.14/' /tmp/libnvidia-container/mk/nvidia-modprobe.mk; \
     grep -Fq 'override VERSION := 550.54.14' /tmp/libnvidia-container/mk/nvidia-modprobe.mk; \
     for source_dir in /tmp/libnvidia-container /tmp/nvidia-container-toolkit; do \
       git -C "${source_dir}" init; \
